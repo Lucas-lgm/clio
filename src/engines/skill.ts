@@ -136,6 +136,253 @@ finer concurrency control. The old Bull v3.x dependency is removed.
 None — the queue API is internal and no consumers changed.
 \`\`\``,
   },
+  {
+    name: 'Requirements Analysis',
+    description: 'Analyze requirements, identify gaps, and produce structured specifications.',
+    keywords: 'requirement,analysis,spec,specification,PRD,需求分析,需求文档',
+    content: `## Skill: Requirements Analysis
+
+Analyze a feature request or problem description to produce a clear, structured specification.
+
+## Instructions
+
+1. Identify **core goal** — what is the user actually trying to achieve?
+2. List **constraints** — technical, business, timeline, resource
+3. Surface **unstated assumptions** — what does the requester take for granted?
+4. Identify **ambiguities** — terms or behaviors that could be interpreted differently
+5. Extract **success criteria** — how will we know it's done?
+6. Note **risks and dependencies** — what could go wrong, what must exist first
+
+## Output Format
+
+Present findings as:
+
+- **Goal**: one-sentence summary
+- **Constraints**: bullet list
+- **Assumptions**: bullet list (flag each as safe / risky / unknown)
+- **Open Questions**: numbered list of things to clarify with the requester
+- **Success Criteria**: bullet list (each must be measurable)
+- **Risks**: bullet list with severity
+
+## Quality Checks
+
+- Does every requirement have a clear "why"?
+- Can you write a test for each success criterion?
+- Could two developers build incompatible solutions from this spec?`,
+  },
+  {
+    name: 'Architecture Design',
+    description: 'Design system architecture with clear component boundaries, data flow, and trade-offs.',
+    keywords: 'architecture,design,system design,component,module,structure,架构设计',
+    content: `## Skill: Architecture Design
+
+Design system architecture following proven patterns with clear rationale.
+
+## Instructions
+
+1. **Understand the problem** — what functions must the system perform?
+2. **Identify boundaries** — what are the natural seams in the problem?
+3. **Define components** — each component has one responsibility and a well-defined interface
+4. **Map data flow** — how does data enter, transform, and leave each component?
+5. **Choose patterns** — justify each pattern choice with concrete benefits
+6. **Address cross-cutting concerns** — error handling, logging, auth, observability
+
+## Design Principles
+
+- **Separation of concerns**: each module does one thing
+- **Dependency direction**: depend on abstractions, not concretions; point inward
+- **Error boundaries**: a failure in one component should not crash unrelated components
+- **Testability**: can each component be tested in isolation?
+
+## Output Format
+
+### Architecture Diagram (ASCII)
+
+\`\`\`
+┌─────────┐     ┌──────────┐     ┌─────────┐
+│  Input  │────▶│  Core    │────▶│ Output  │
+└─────────┘     └──────────┘     └─────────┘
+                      │
+                      ▼
+                ┌──────────┐
+                │ Storage  │
+                └──────────┘
+\`\`\`
+
+### Component Registry
+
+| Component | Responsibility | Interface | Dependencies |
+|-----------|---------------|-----------|-------------|
+| Parser    | Parse input   | parse()   | Tokenizer   |
+
+### Data Flow
+
+Describe the lifecycle of a single request/event through the system.
+
+### Trade-offs
+
+List design decisions and what was sacrificed for each.`,
+  },
+  {
+    name: 'Codebase Navigation',
+    description: 'Navigate and understand large codebases: find entry points, trace data flow, map module dependencies.',
+    keywords: 'codebase,navigate,explore,understand,large project,entry point,data flow,查看代码,阅读代码',
+    content: `## Skill: Codebase Navigation
+
+Navigate unfamiliar large codebases efficiently to find relevant code and understand structure.
+
+## Instructions
+
+1. **Find entry points** — \`package.json\` (main/bin), \`index.ts\`, \`main.ts\`, CLI entry point
+2. **Map top-level structure** — list top-level directories, read directory names as module hints
+3. **Trace a data flow end-to-end** — pick one feature, trace from input to output
+4. **Identify key abstractions** — base classes, interfaces, types that appear everywhere
+5. **Read tests first** — tests document how code is actually used
+6. **Check configuration** — \`tsconfig.json\`, \`Dockerfile\`, CI configs reveal stack decisions
+
+## Heuristics
+
+- \`src/index.ts\` or \`src/main.ts\` is usually the entry point
+- \`src/types.ts\` or \`src/types/\` contains shared type definitions
+- A \`src/utils/\` or \`src/helpers/\` directory often grows into a dumping ground — watch for signs of missing abstractions
+- Test files named \`*.test.ts\` or \`*.spec.ts\` near the implementation file tell you how it's meant to be used
+- \`git log --oneline --follow <file>\` shows a file's recent change history
+
+## Output Format
+
+\`\`\`
+Project: <name>
+Entry point: <path>
+Stack: <key technologies>
+
+Module Map:
+- src/module-a/ — handles X (entry: index.ts)
+- src/module-b/ — handles Y
+
+Data Flow (feature X):
+  Input → Module A.parse() → Core.process() → Module B.render() → Output
+
+Key Types:
+- type Foo = ...
+
+Open Questions:
+- What does module C do?
+\`\`\``,
+  },
+  {
+    name: 'Refactoring Plan',
+    description: 'Plan safe, incremental refactoring of large complex code with test coverage and migration strategy.',
+    keywords: 'refactor,refactoring,migration,restructure,clean code,重构,重构计划',
+    content: `## Skill: Refactoring Plan
+
+Plan safe, incremental refactoring of complex code with minimal disruption.
+
+## Instructions
+
+1. **Understand current state** — read the code, identify what it does and what's wrong
+2. **Define target state** — what should the code look like after refactoring?
+3. **Identify safe extraction boundaries** — code units that can be extracted without changing behavior
+4. **Plan incremental steps** — each step must keep the system working (Strangler Fig pattern)
+5. **Add characterization tests** — write tests that capture current behavior BEFORE changing code
+6. **Flag risks** — shared mutable state, implicit dependencies, side effects
+
+## Principles
+
+- **One change at a time**: each commit changes one thing. If you need to rename and restructure, do them in separate commits.
+- **Characterization tests first**: before changing a function, write tests that document what it actually does (even if wrong)
+- **Strangler Fig**: add the new path alongside the old, route traffic gradually, remove the old path
+- **No mixed refactoring**: never fix bugs while refactoring — the refactoring might introduce bugs, and you won't know which change caused them
+
+## Output Format
+
+### Current Problems
+- What's wrong and why it matters
+
+### Target Architecture
+- Brief description of the desired state
+
+### Migration Plan
+
+1. **Step 1: Characterization tests** — files to add, what they cover
+2. **Step 2: Extract module** — what moves where, why safe
+3. **Step 3: Update callers** — what changes, what doesn't
+4. **Step N: Remove old code** — what gets deleted
+
+### Risk Register
+| Risk | Likelihood | Mitigation |
+|------|-----------|------------|
+| ...  | High/Med  | ...        |
+
+### Rollback Plan
+How to revert each step if something breaks.`,
+  },
+  {
+    name: 'Test Strategy',
+    description: 'Design comprehensive test strategies: unit, integration, e2e coverage with risk-based prioritization.',
+    keywords: 'test,testing,coverage,unit test,integration test,e2e,TDD,测试,测试策略',
+    content: `## Skill: Test Strategy
+
+Design a test strategy that balances coverage, speed, and maintenance cost.
+
+## Instructions
+
+### 1. Categorize Tests by Scope
+
+- **Unit tests** (fast, many): test single functions/classes in isolation. Mock external dependencies.
+- **Integration tests** (medium, few): test component interactions with real dependencies (DB, API).
+- **E2E tests** (slow, minimal): test critical user journeys through the full system.
+
+### 2. Prioritize by Risk
+
+Test in this order:
+1. Core business logic — if this breaks, nothing works
+2. Error handling — untested error paths = silent failures in production
+3. Edge cases — empty states, boundary values, concurrent access
+4. Happy path — the most common flow (often already covered by above)
+5. UI/rendering — lowest priority, highest maintenance cost
+
+### 3. Test Structure (AAA)
+
+\`\`\`
+// Arrange — set up the test data and preconditions
+// Act — execute the code under test
+// Assert — verify the behavior and outcomes
+\`\`\`
+
+### 4. Coverage Goals
+
+- Unit: 80%+ line coverage (measure with \`--coverage\`)
+- Integration: every public API endpoint / module entry point
+- E2E: top 3-5 user journeys
+
+### 5. What NOT to Test
+
+- Third-party library behavior (test your usage, not their code)
+- Trivial getters/setters
+- Configuration values (test that config loads, not each value)
+- Implementation details (test behavior, not internal calls)
+
+## Output Format
+
+\`\`\`
+Test Plan: <Feature>
+
+Unit Tests:
+- [ ] function A handles empty input
+- [ ] function A handles boundary value X
+- [ ] function B propagates error from dependency
+
+Integration Tests:
+- [ ] API endpoint /foo returns 200 with valid input
+- [ ] API endpoint /foo returns 400 with invalid input
+
+E2E Tests:
+- [ ] User can complete flow X
+
+Risk Gaps:
+- Error path in module Y is untested
+\`\`\``,
+  },
 ];
 
 export class SkillEngine {

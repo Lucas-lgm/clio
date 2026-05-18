@@ -11,7 +11,7 @@ describe('SkillEngine', () => {
     initSchema(db);
     const engine = new SkillEngine(db);
     const skills = engine.getManifest();
-    expect(skills).toHaveLength(3);
+    expect(skills).toHaveLength(8);
     expect(skills.map(s => s.name)).toContain('Git Commit');
     expect(skills.map(s => s.name)).toContain('Shell Audit');
     expect(skills.map(s => s.name)).toContain('PR Description');
@@ -26,7 +26,7 @@ describe('SkillEngine', () => {
     // Second run should NOT add duplicates
     new SkillEngine(db);
     const count = db.prepare('SELECT COUNT(*) as cnt FROM skills').get() as any;
-    expect(count.cnt).toBe(3);
+    expect(count.cnt).toBe(8);
   });
 
   it('getManifest should return lightweight entries', () => {
