@@ -170,7 +170,7 @@ export class CaptureEngine {
         savedCount++;
         const id = randomUUID();
         this.db.prepare(
-          'INSERT INTO semantic_memories (id, content, memory_type, topic, value, source_session, confidence, project_path) VALUES (?, ?, ?, ?, ?, ?, 0.5, ?)'
+          'INSERT INTO semantic_memories (id, content, memory_type, topic, value, source_session, confidence, project_path) VALUES (?, ?, ?, ?, ?, ?, 0.7, ?)'
         ).run(id, this.redact(fact.content), fact.type ?? 'fact', fact.topic ?? null, fact.value ?? null, sessionId, prjPath);
 
         // Index in FTS5
