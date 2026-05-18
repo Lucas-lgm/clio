@@ -1,14 +1,17 @@
 import { createServer, Socket } from 'net';
 import { join } from 'path';
 import { unlinkSync, existsSync } from 'fs';
-import { CLIO_HOME } from '../config.js';
+import { getClioHome } from '../config.js';
 import type { IpcRequest, IpcResponse } from './protocol.js';
 
-export const SOCKET_PATH = join(CLIO_HOME, 'clio.sock');
+export function getSocketPath(): string {
+  return join(getClioHome(), 'clio.sock');
+}
 
 export type RequestHandler = (req: IpcRequest) => Promise<IpcResponse>;
 
 export function startIpcServer(handler: RequestHandler): Promise<string> {
+  const SOCKET_PATH = getSocketPath();
   return new Promise((resolve, reject) => {
     if (existsSync(SOCKET_PATH)) {
       try { unlinkSync(SOCKET_PATH); } catch { /* ignore */ }

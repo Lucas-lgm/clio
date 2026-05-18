@@ -39,10 +39,15 @@ export function loadConfig(): ClioConfig {
   return { ...DEFAULT_CONFIG, ...JSON.parse(readFileSync(configPath, 'utf-8')) };
 }
 
+export function getClioHome(): string {
+  return process.env.CLIO_HOME ?? join(homedir(), '.clio');
+}
+
 export function ensureClioHome(): void {
-  if (!existsSync(CLIO_HOME)) {
-    mkdirSync(CLIO_HOME, { recursive: true });
-    mkdirSync(join(CLIO_HOME, 'data'), { recursive: true });
-    mkdirSync(join(CLIO_HOME, 'models'), { recursive: true });
+  const clioHome = getClioHome();
+  if (!existsSync(clioHome)) {
+    mkdirSync(clioHome, { recursive: true });
+    mkdirSync(join(clioHome, 'data'), { recursive: true });
+    mkdirSync(join(clioHome, 'models'), { recursive: true });
   }
 }

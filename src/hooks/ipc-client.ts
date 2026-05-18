@@ -1,10 +1,10 @@
 import { connect } from 'net';
-import { SOCKET_PATH } from '../ipc/server.js';
+import { getSocketPath } from '../ipc/server.js';
 import type { IpcRequest, IpcResponse } from '../ipc/protocol.js';
 
 export function sendToClio(type: IpcRequest['type'], payload: Record<string, unknown> = {}): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const client = connect(SOCKET_PATH, () => {
+    const client = connect(getSocketPath(), () => {
       const req: IpcRequest = { id: crypto.randomUUID(), type, payload };
       client.write(JSON.stringify(req) + '\n');
     });

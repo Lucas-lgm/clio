@@ -13,10 +13,10 @@ import { DecayEngine } from './engines/decay.js';
 import { ProfileEngine } from './engines/profile.js';
 
 const config = loadConfig();
+ensureClioHome();
 const db = getDb();
 
 console.error('[clio] starting...');
-ensureClioHome();
 
 const embedding = new EmbeddingService();
 const capture = new CaptureEngine(db, config);
