@@ -10,7 +10,7 @@ import { logger } from '../logger.js';
 
 const SKIP_TOOLS = new Set(['Read', 'Glob', 'listFiles']);
 
-function parseLooseJson(raw: string): unknown {
+export function parseLooseJson(raw: string): unknown {
   // First try strict parse
   try { return JSON.parse(raw); } catch { /* fall through */ }
   // Strip trailing commas (common LLM mistake)

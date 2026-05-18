@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
 import { load as loadVec0 } from 'sqlite-vec';
 import { initSchema } from '../src/storage/database.js';
-import { CaptureEngine } from '../src/engines/capture.js';
+import { CaptureEngine, parseLooseJson } from '../src/engines/capture.js';
 
 function createEngine(): CaptureEngine {
   const db = new Database(':memory:');
@@ -15,6 +15,44 @@ function createEngine(): CaptureEngine {
     storage: { max_semantic_memories: 500 },
   });
 }
+
+describe('parseLooseJson', () => {
+  it('should parse valid JSON', () => {
+    expect(parseLooseJson('[{"a": 1}]')).toEqual([{ a: 1 }]);
+  });
+
+  it('should parse with trailing commas', () => {
+    expect(parseLooseJson('[1, 2, 3,]')).toEqual([1, 2, 3]);
+    expect(parseLooseJson('{"a": 1,}')).toEqual({ a: 1 });
+  });
+
+  it('should parse unquoted keys', () => {
+    expect(parseLooseJson('{key: "value"}')).toEqual({ key: 'value' });
+  });
+
+  it('should parse single quotes', () => {
+    expect(parseLooseJson("{'a': 1}")).toEqual({ a: 1 });
+  });
+
+  it('should handle combined issues', () => {
+    const result = parseLooseJson("{name: 'asyncpg',}") as any;
+    expect(result.name).toBe('asyncpg');
+  });
+
+  it('should parse flat string array', () => {
+    expect(parseLooseJson('["fact one", "fact two"]')).toEqual(['fact one', 'fact two']);
+  });
+
+  it('should throw on truly invalid input', () => {
+    expect(() => parseLooseJson('not json at all {{{')).toThrow();
+  });
+
+  it('should handle JSON with markdown fences', () => {
+    // parseLooseJson doesn't strip fences, that's done upstream — test the actual case
+    const cleaned = '```json\n[{"a": 1}]\n```'.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+    expect(parseLooseJson(cleaned)).toEqual([{ a: 1 }]);
+  });
+});
 
 describe('CaptureEngine', () => {
   it('should redact API keys', () => {
@@ -75,5 +113,62 @@ describe('CaptureEngine', () => {
     const db = (engine as any).db;
     const count = db.prepare('SELECT COUNT(*) as c FROM working_memories').get() as any;
     expect(count.c).toBe(1);
+  });
+
+  it('should observe with custom sessionId', () => {
+    const engine = createEngine();
+    engine.observe('Write', 'some content', 'custom-session-1');
+    const db = (engine as any).db;
+    const row = db.prepare('SELECT session_id FROM working_memories').get() as any;
+    expect(row.session_id).toBe('custom-session-1');
+  });
+
+  it('should skip content shorter than 10 chars', () => {
+    const engine = createEngine();
+    engine.observe('Write', 'short');
+    const db = (engine as any).db;
+    const count = db.prepare('SELECT COUNT(*) as c FROM working_memories').get() as any;
+    expect(count.c).toBe(0);
+  });
+
+  it('should deduplicate identical content within window', () => {
+    const engine = createEngine();
+    engine.observe('Write', 'this is a test observation with enough length');
+    engine.observe('Write', 'this is a test observation with enough length');
+    const db = (engine as any).db;
+    const count = db.prepare('SELECT COUNT(*) as c FROM working_memories').get() as any;
+    expect(count.c).toBe(1);
+  });
+
+  it('should save session snapshot', () => {
+    const engine = createEngine();
+    engine.saveSnapshot({ sessionId: 'sess-1', toolCount: 5 });
+    const db = (engine as any).db;
+    const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get('sess-1') as any;
+    expect(row.id).toBe('sess-1');
+    expect(row.tool_count).toBe(5);
+  });
+
+  it('should update existing session snapshot', () => {
+    const engine = createEngine();
+    engine.saveSnapshot({ sessionId: 'sess-1', toolCount: 3 });
+    engine.saveSnapshot({ sessionId: 'sess-1', toolCount: 7 });
+    const db = (engine as any).db;
+    const row = db.prepare('SELECT tool_count FROM sessions WHERE id = ?').get('sess-1') as any;
+    expect(row.tool_count).toBe(7);
+  });
+
+  it('should handle empty session in summarizeSession early return', async () => {
+    const engine = createEngine();
+    // No working memories for this session → early return
+    // Pass minimal mocks for the downstream engines
+    const mockDb = (engine as any).db;
+    const mockInstinct = { detect: () => {} };
+    const mockDecay = { run: () => {} };
+    const mockProfile = { sync: () => {} };
+    await engine.summarizeSession('empty-session', mockInstinct as any, mockDecay as any, mockProfile as any);
+    // Should not throw, should not create semantic memories
+    const mems = mockDb.prepare('SELECT COUNT(*) as c FROM semantic_memories').get() as any;
+    expect(mems.c).toBe(0);
   });
 });
