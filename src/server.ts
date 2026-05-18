@@ -34,7 +34,7 @@ async function handleIpcRequest(req: IpcRequest): Promise<IpcResponse> {
     const projectPath = payload['projectPath'] as string | undefined;
     switch (type) {
       case 'capture_observation':
-        capture.observe(payload['toolName'] as string, payload['toolOutput'] as string);
+        capture.observe(payload['toolName'] as string, payload['toolOutput'] as string, payload['sessionId'] as string | undefined);
         return { id: req.id, success: true };
       case 'detect_preferences':
         return { id: req.id, success: true, data: capture.detectPreferences(payload['text'] as string) };

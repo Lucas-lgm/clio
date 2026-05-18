@@ -10,6 +10,17 @@ import { logger } from '../logger.js';
 
 const SKIP_TOOLS = new Set(['Read', 'Glob', 'listFiles']);
 
+function parseLooseJson(raw: string): unknown {
+  // First try strict parse
+  try { return JSON.parse(raw); } catch { /* fall through */ }
+  // Strip trailing commas (common LLM mistake)
+  const cleaned = raw
+    .replace(/,\s*([}\]])/g, '$1')        // remove trailing commas before ] or }
+    .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?\s*:/g, '"$2":') // unquoted keys → quoted
+    .replace(/'/g, '"');                    // single quotes → double
+  return JSON.parse(cleaned);
+}
+
 const SENSITIVE_PATTERNS: [RegExp, string][] = [
   [/api[_-]?key["']?\s*[:=]\s*["']?[\w-]{16,}/gi, 'API_KEY_REDACTED'],
   [/AKIA[0-9A-Z]{16}/g, 'AWS_KEY_REDACTED'],
@@ -47,10 +58,10 @@ export class CaptureEngine {
   private anthropic: Anthropic;
 
   constructor(private db: Database.Database, private config: ClioConfig) {
-    this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
   }
 
-  observe(toolName: string, toolOutput: string): void {
+  observe(toolName: string, toolOutput: string, sessionId?: string): void {
     if (SKIP_TOOLS.has(toolName)) return;
 
     const content = this.redact(toolOutput.slice(0, this.config.capture.max_tool_output_chars));
@@ -61,7 +72,7 @@ export class CaptureEngine {
     this.recentHashes.push(hash);
     if (this.recentHashes.length > 100) this.recentHashes.shift();
 
-    const sessionId = process.env.CLAUDE_SESSION_ID ?? 'unknown';
+    sessionId ??= process.env.CLAUDE_SESSION_ID ?? 'unknown';
     this.db.prepare(
       'INSERT INTO working_memories (id, session_id, source, content, pattern_type) VALUES (?, ?, ?, ?, NULL)'
     ).run(randomUUID(), sessionId, 'tool_use', content);
@@ -117,27 +128,35 @@ export class CaptureEngine {
 
     try {
       const response = await this.anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514',
         max_tokens: 500,
         messages: [{
           role: 'user',
-          content: `Extract 1-5 key facts from this conversation log. Only include:\n` +
+          content: `Extract 1-5 key facts from this conversation log. Return ONLY valid JSON, no markdown. Example format:\n` +
+            `[{"content": "User prefers using asyncpg", "type": "preference", "topic": "database", "value": "asyncpg"}]\n\n` +
+            `Only include:\n` +
             `1. Explicit technical preferences\n` +
             `2. Important technical decisions (with reasons)\n` +
-            `3. Corrections made to Claude\n` +
-            `Output as JSON array, each item with content, type (fact|preference|decision|pattern), topic, value.\n` +
-            `If a fact implies a user preference that belongs in a profile (code style, workflow habit, role), also set profile_key and profile_value using these prefixes:\n` +
-            `  code_style: language, indent, quotes, line_width, formatter, linter, type_annotations\n` +
-            `  tech_stack: language, framework, database, testing, build_tool\n` +
-            `  workflow: commit_style, test_approach, branch_naming, review_preference\n` +
-            `  role: engineer_type, expertise_level, responsibility\n\nConversation log:\n${conversationText}`,
+            `3. Corrections made to Claude\n\n` +
+            `Each item must have: content (string), type (fact|preference|decision|pattern), topic (string), value (string).\n` +
+            `If a fact belongs in a profile, add profile_key and profile_value using these prefix patterns:\n` +
+            `  code_style.<trait>: language, indent, quotes, formatter, linter, type_annotations\n` +
+            `  tech_stack.<trait>: language, framework, database, testing, build_tool\n` +
+            `  workflow.<trait>: commit_style, test_approach, branch_naming\n` +
+            `  role.<trait>: engineer_type, expertise_level, responsibility\n\nConversation log:\n${conversationText}`,
         }],
       });
 
-      const textBlock = response.content[0];
-      if (textBlock.type !== 'text') return;
-      const parsed = JSON.parse(textBlock.text);
-      const facts = Array.isArray(parsed) ? parsed : [parsed];
+      const textBlock = response.content.find(b => b.type === 'text') as any;
+      if (!textBlock) return;
+
+      // Strip markdown code fences if present
+      let raw = textBlock.text.trim();
+      raw = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+      const parsed = parseLooseJson(raw);
+      const facts = (Array.isArray(parsed) ? parsed : [parsed]).map((f: any) =>
+        typeof f === 'string' ? { content: f, type: 'fact', topic: null, value: null } : f
+      );
       let savedCount = 0;
 
       for (const fact of facts) {
@@ -181,6 +200,7 @@ export class CaptureEngine {
       }
 
       logger.info(`summarize: saved ${savedCount} facts, running downstream engines...`);
+      this.db.prepare('DELETE FROM working_memories WHERE session_id = ?').run(sessionId);
     } catch (err) {
       logger.error('summarize error (non-fatal):', err);
     }
@@ -188,8 +208,6 @@ export class CaptureEngine {
     instinct.detect(sessionId);
     decay.run();
     profile.sync(prjPath);
-
-    this.db.prepare('DELETE FROM working_memories WHERE session_id = ?').run(sessionId);
   }
 
   saveSnapshot(data: { sessionId: string; toolCount?: number; projectPath?: string }): void {
