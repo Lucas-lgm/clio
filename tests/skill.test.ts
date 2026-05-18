@@ -5,7 +5,7 @@ import { initSchema } from '../src/storage/database.js';
 import { SkillEngine } from '../src/engines/skill.js';
 
 describe('SkillEngine', () => {
-  it('should seed 3 default skills on first run', () => {
+  it('should seed 8 default skills on first run', () => {
     const db = new Database(':memory:');
     loadVec0(db);
     initSchema(db);
