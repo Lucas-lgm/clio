@@ -89,31 +89,6 @@ npm run build
 npm test
 ```
 
-### Project Structure
-
-```
-src/
-├── server.ts              # Daemon entry (MCP Server + IPC)
-├── logger.ts              # Structured logger (file + stderr)
-├── config.ts              # Config management
-├── engines/
-│   ├── capture.ts         # Capture, redact, classify, LLM compression
-│   ├── recall.ts          # BM25 + vector hybrid search, RRF fusion
-│   ├── instinct.ts        # Cross-session pattern detection
-│   ├── decay.ts           # Confidence decay and archive
-│   └── profile.ts         # User profile extraction
-├── storage/
-│   ├── database.ts        # SQLite schema (FTS5 + vec0)
-│   └── embedding.ts       # all-MiniLM-L6-v2 via @xenova/transformers
-├── ipc/
-│   ├── protocol.ts        # IPC type definitions
-│   └── server.ts          # Unix socket server
-└── hooks/                 # Claude Code hook scripts (thin shims)
-tests/                     # Vitest test suite
-```
-
----
-
 ## Contributing
 
 Contributions are welcome. Open an issue or pull request.
