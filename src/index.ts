@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { ensureClioHome, CLIO_HOME } from './config.js';
 import { getDb, closeDb } from './storage/database.js';
+import { EmbeddingService } from './storage/embedding.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -23,7 +24,15 @@ async function cmdInstall() {
   console.log('[clio] database initialized');
   closeDb();
 
-  // 3. Write default config if not exists
+  // 3. Bundle bundled embedding model if present
+  const bundledModels = join(__dirname, '..', 'bundled-models');
+  if (existsSync(bundledModels)) {
+    const targetModels = join(CLIO_HOME, 'models');
+    cpSync(bundledModels, targetModels, { recursive: true, force: false });
+    console.log('[clio] bundled models copied');
+  }
+
+  // 4. Write default config if not exists
   const configPath = join(CLIO_HOME, 'config.json');
   if (!existsSync(configPath)) {
     writeFileSync(configPath, JSON.stringify({
@@ -36,7 +45,7 @@ async function cmdInstall() {
     console.log('[clio] config created');
   }
 
-  // 4. Update ~/.claude/settings.json
+  // 5. Update ~/.claude/settings.json
   const claudeConfigPath = getClaudeConfigPath();
   let claudeConfig: any = {};
 
@@ -94,7 +103,16 @@ async function cmdStatus() {
   Data path:         ${dbPath}`);
 }
 
+async function cmdDownloadModels() {
+  ensureClioHome();
+  console.log('[clio] downloading embedding model: Xenova/all-MiniLM-L6-v2...');
+  const embedding = new EmbeddingService();
+  await embedding.load();
+  console.log('[clio] embedding model downloaded and cached');
+}
+
 const cmd = process.argv[2];
 if (cmd === 'install') cmdInstall().catch(console.error);
 else if (cmd === 'status') cmdStatus().catch(console.error);
-else console.log('Usage: clio install | status');
+else if (cmd === 'download-models') cmdDownloadModels().catch(console.error);
+else console.log('Usage: clio install | status | download-models');

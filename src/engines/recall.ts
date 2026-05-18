@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import type { ClioConfig } from '../config.js';
 import type { EmbeddingService } from '../storage/embedding.js';
+import type { SkillManifest } from './skill.js';
 import { logger } from '../logger.js';
 
 export class RecallEngine {
@@ -10,16 +11,29 @@ export class RecallEngine {
     private embedding: EmbeddingService,
   ) {}
 
-  getInitialContext(): string {
+  getInitialContext(projectPath?: string, skills?: SkillManifest[]): string {
+    const scope = projectPath ?? '';
     const memories = this.db.prepare(`
       SELECT content, memory_type, topic, value
       FROM semantic_memories
       WHERE confidence >= 0.7 AND is_archived = 0
+        AND (project_path = ? OR project_path = '')
       ORDER BY (access_count * 0.3 + confidence * 0.7) DESC
       LIMIT ?
-    `).all(this.config.recall.top_k_startup) as any[];
+    `).all(scope, this.config.recall.top_k_startup) as any[];
 
-    const profiles = this.db.prepare('SELECT key, value FROM profile').all() as any[];
+    // Profile: project-level entries preferred, global fills gaps
+    const profileRows = this.db.prepare(
+      "SELECT key, value, confidence FROM profile WHERE confidence >= 0.5 AND (project_path = ? OR project_path = '') ORDER BY key, CASE WHEN project_path = ? THEN 0 ELSE 1 END, confidence DESC"
+    ).all(scope, scope) as any[];
+    const seen = new Set<string>();
+    const profiles: any[] = [];
+    for (const p of profileRows) {
+      if (!seen.has(p.key)) {
+        seen.add(p.key);
+        profiles.push(p);
+      }
+    }
 
     if (memories.length === 0 && profiles.length === 0) return '';
 
@@ -29,18 +43,32 @@ export class RecallEngine {
     lines.push('<!-- clio: user profile -->');
 
     if (profiles.length > 0) {
-      lines.push('- preferences: ' + profiles.map(p => `${p.key}=${p.value}`).join(', '));
+      lines.push('## User Preferences (learned across sessions)');
+      for (const p of profiles) {
+        const label = p.key.replace(/^(tech_stack|code_style|pattern|role)\./, '');
+        lines.push(`- ${label}: ${p.value}`);
+      }
+      lines.push('');
     }
 
     for (const mem of memories) {
       lines.push(`- ${mem.memory_type}: ${mem.content}`);
     }
 
+    if (skills && skills.length > 0) {
+      lines.push('');
+      lines.push('## Available Skills (use via /use <name> or the use_skill tool)');
+      for (const s of skills) {
+        lines.push(`- ${s.name}: ${s.description}`);
+      }
+    }
+
     return lines.join('\n');
   }
 
-  async recallRelevant(query: string): Promise<string> {
+  async recallRelevant(query: string, projectPath?: string): Promise<string> {
     if (!query || query.length < 3) return '';
+    const scope = projectPath ?? '';
 
     const bm25Results = this.db.prepare(`
       SELECT sm.id, sm.content, sm.memory_type, sm.confidence, sm.topic, sm.value
@@ -48,9 +76,10 @@ export class RecallEngine {
       JOIN semantic_memories sm ON sm.rowid = ft.rowid
       WHERE memories_fts MATCH ?
         AND sm.is_archived = 0
+        AND (sm.project_path = ? OR sm.project_path = '')
       ORDER BY rank
       LIMIT 10
-    `).all(this.escapeFts5(query)) as any[];
+    `).all(this.escapeFts5(query), scope) as any[];
 
     let vectorResults: any[] = [];
     try {
@@ -62,9 +91,10 @@ export class RecallEngine {
           JOIN semantic_memories sm ON sm.id = v.id
           WHERE v.embedding MATCH ?
             AND sm.is_archived = 0
+            AND (sm.project_path = ? OR sm.project_path = '')
           ORDER BY distance
           LIMIT 10
-        `).all(Buffer.from(queryVec.buffer)) as any[];
+        `).all(Buffer.from(queryVec.buffer), scope) as any[];
       }
     } catch {
       logger.warn('recall: vector search failed, falling back to BM25 only');

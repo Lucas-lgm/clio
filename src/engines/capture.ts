@@ -100,6 +100,7 @@ export class CaptureEngine {
     decay: DecayEngine,
     profile: ProfileEngine,
     embedding?: EmbeddingService,
+    projectPath?: string,
   ): Promise<void> {
     const rows = this.db.prepare(
       'SELECT content FROM working_memories WHERE session_id = ? ORDER BY created_at'
@@ -112,6 +113,7 @@ export class CaptureEngine {
 
     logger.info(`summarize: ${rows.length} working memories, extracting facts...`);
     const conversationText = rows.map(r => r.content).join('\n').slice(0, 10000);
+    const prjPath = projectPath ?? '';
 
     try {
       const response = await this.anthropic.messages.create({
@@ -123,7 +125,12 @@ export class CaptureEngine {
             `1. Explicit technical preferences\n` +
             `2. Important technical decisions (with reasons)\n` +
             `3. Corrections made to Claude\n` +
-            `Output as JSON array, each item with content, type (fact|preference|decision|pattern), topic, value.\n\nConversation log:\n${conversationText}`,
+            `Output as JSON array, each item with content, type (fact|preference|decision|pattern), topic, value.\n` +
+            `If a fact implies a user preference that belongs in a profile (code style, workflow habit, role), also set profile_key and profile_value using these prefixes:\n` +
+            `  code_style: language, indent, quotes, line_width, formatter, linter, type_annotations\n` +
+            `  tech_stack: language, framework, database, testing, build_tool\n` +
+            `  workflow: commit_style, test_approach, branch_naming, review_preference\n` +
+            `  role: engineer_type, expertise_level, responsibility\n\nConversation log:\n${conversationText}`,
         }],
       });
 
@@ -144,8 +151,8 @@ export class CaptureEngine {
         savedCount++;
         const id = randomUUID();
         this.db.prepare(
-          'INSERT INTO semantic_memories (id, content, memory_type, topic, value, source_session, confidence) VALUES (?, ?, ?, ?, ?, ?, 0.5)'
-        ).run(id, this.redact(fact.content), fact.type ?? 'fact', fact.topic ?? null, fact.value ?? null, sessionId);
+          'INSERT INTO semantic_memories (id, content, memory_type, topic, value, source_session, confidence, project_path) VALUES (?, ?, ?, ?, ?, ?, 0.5, ?)'
+        ).run(id, this.redact(fact.content), fact.type ?? 'fact', fact.topic ?? null, fact.value ?? null, sessionId, prjPath);
 
         // Index in FTS5
         const row = this.db.prepare('SELECT rowid FROM semantic_memories WHERE id = ?').get(id) as any;
@@ -166,6 +173,11 @@ export class CaptureEngine {
             // embedding failure is non-fatal
           }
         }
+
+        // Direct profile extraction for LLM-identified traits
+        if (fact.profile_key && fact.profile_value) {
+          profile.extract(fact.profile_key, fact.profile_value, prjPath);
+        }
       }
 
       logger.info(`summarize: saved ${savedCount} facts, running downstream engines...`);
@@ -175,14 +187,14 @@ export class CaptureEngine {
 
     instinct.detect(sessionId);
     decay.run();
-    profile.sync();
+    profile.sync(prjPath);
 
     this.db.prepare('DELETE FROM working_memories WHERE session_id = ?').run(sessionId);
   }
 
-  saveSnapshot(data: { sessionId: string; toolCount?: number }): void {
+  saveSnapshot(data: { sessionId: string; toolCount?: number; projectPath?: string }): void {
     this.db.prepare(
-      'INSERT OR REPLACE INTO sessions (id, tool_count) VALUES (?, ?)'
-    ).run(data.sessionId, data.toolCount ?? 0);
+      'INSERT OR REPLACE INTO sessions (id, tool_count, project_path) VALUES (?, ?, ?)'
+    ).run(data.sessionId, data.toolCount ?? 0, data.projectPath ?? '');
   }
 }

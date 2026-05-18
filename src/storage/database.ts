@@ -71,11 +71,15 @@ export function initSchema(database: Database.Database): void {
       token_estimate INTEGER DEFAULT 0
     );
 
-    CREATE TABLE IF NOT EXISTS profile (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      confidence REAL DEFAULT 0.5,
-      source TEXT,
+    CREATE TABLE IF NOT EXISTS skills (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL,
+      keywords TEXT NOT NULL DEFAULT '',
+      content TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'user' CHECK(type IN ('builtin','user','auto')),
+      usage_count INTEGER DEFAULT 0,
+      success_count INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
@@ -91,4 +95,54 @@ export function initSchema(database: Database.Database): void {
       embedding float[384]
     );
   `);
+
+  // Profile table needs special handling for migration to composite key
+  const profileCols = database.prepare("PRAGMA table_info('profile')").all() as any[];
+  if (profileCols.length === 0) {
+    // New database — create with project_path from the start
+    database.exec(`
+      CREATE TABLE profile (
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        confidence REAL DEFAULT 0.5,
+        source TEXT,
+        project_path TEXT NOT NULL DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (key, project_path)
+      );
+    `);
+  }
+
+  // Migration: add project_path to semantic_memories
+  const smCols = database.prepare("PRAGMA table_info('semantic_memories')").all() as any[];
+  if (!smCols.some((c: any) => c.name === 'project_path')) {
+    database.exec("ALTER TABLE semantic_memories ADD COLUMN project_path TEXT NOT NULL DEFAULT ''");
+  }
+
+  // Migration: upgrade profile from old schema
+  if (profileCols.length > 0 && !profileCols.some((c: any) => c.name === 'project_path')) {
+    database.exec("ALTER TABLE profile RENAME TO profile_old");
+    database.exec(`
+      CREATE TABLE profile (
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        confidence REAL DEFAULT 0.5,
+        source TEXT,
+        project_path TEXT NOT NULL DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (key, project_path)
+      );
+    `);
+    database.exec(`
+      INSERT INTO profile (key, value, confidence, source, created_at, updated_at, project_path)
+      SELECT key, value, confidence, source, created_at, updated_at, '' FROM profile_old
+    `);
+    database.exec("DROP TABLE profile_old");
+  }
+
+  // Indexes for project-scoped queries
+  database.exec("CREATE INDEX IF NOT EXISTS idx_semantic_project ON semantic_memories(project_path)");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_profile_project ON profile(project_path)");
 }

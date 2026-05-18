@@ -45,9 +45,7 @@ export function getClioHome(): string {
 
 export function ensureClioHome(): void {
   const clioHome = getClioHome();
-  if (!existsSync(clioHome)) {
-    mkdirSync(clioHome, { recursive: true });
-    mkdirSync(join(clioHome, 'data'), { recursive: true });
-    mkdirSync(join(clioHome, 'models'), { recursive: true });
-  }
+  mkdirSync(clioHome, { recursive: true });
+  mkdirSync(join(clioHome, 'data'), { recursive: true });
+  mkdirSync(join(clioHome, 'models'), { recursive: true });
 }

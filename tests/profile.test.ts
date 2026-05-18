@@ -16,7 +16,8 @@ describe('ProfileEngine', () => {
     const engine = new ProfileEngine(db);
     engine.sync();
 
-    const profile = db.prepare('SELECT * FROM profile WHERE key = ?').get('tech_stack.database-driver') as any;
+    // 'database-driver' is not in KEY_MAP → falls back to 'preference.database-driver'
+    const profile = db.prepare('SELECT * FROM profile WHERE key = ?').get('preference.database-driver') as any;
     expect(profile).toBeTruthy();
     expect(profile.value).toBe('asyncpg');
   });
