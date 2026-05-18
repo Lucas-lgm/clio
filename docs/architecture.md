@@ -330,14 +330,14 @@ flowchart TD
 ```mermaid
 flowchart TD
     subgraph SessionStart
-        A[SessionStart Hook] --> B[""调用 getInitialContext()""]
+        A[SessionStart Hook] --> B["调用 getInitialContext()"]
         B --> C["查询 semantic_memories<br>confidence>=0.7<br>排序: access*0.3+confidence*0.7"]
         C --> D[取 Top-5 + profile 全部条目]
         D --> E["组装 ~500 tokens<br>注入 system prompt"]
     end
 
     subgraph UserPromptSubmit
-        F[用户输入] --> G[""调用 recallRelevant(text)""]
+        F[用户输入] --> G["调用 recallRelevant(text)"]
         G --> H[input → embedding → 向量检索 Top-10]
         G --> I[BM25 FTS5 检索 Top-10]
         H --> J[RRF 融合排序]
@@ -352,21 +352,21 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["Stop: 新语义记忆写入"] --> B[""InstinctEngine.detect()""]
+    A["Stop: 新语义记忆写入"] --> B["InstinctEngine.detect()"]
     B --> C["遍历每条新记忆"]
     C --> D{"topic 为空?"}
     D -->|是| E["跳过"]
-    D -->|否| F{""instincts 表已有<br>相同 topic+value?""}
+    D -->|否| F{"instincts 表已有<br>相同 topic+value?"}
     F -->|否| G["创建 instinct<br>confidence=0.3, hit_count=1"]
     F -->|是| H["hit_count+1"]
-    H --> I[""confidence = min(0.7, 0.3+hit*0.15)""]
-    I --> J{""confidence >= 0.7<br>AND status = pending?""}
+    H --> I["confidence = min(0.7, 0.3+hit*0.15)"]
+    I --> J{"confidence >= 0.7<br>AND status = pending?"}
     J -->|否| K["更新 instinct"]
-    J -->|是| L[""promoteToSemantic()""]
+    J -->|是| L["promoteToSemantic()"]
     L --> M["创建 pattern 类型语义记忆"]
     M --> N["instinct.status = promoted"]
 
-    O[""0.3: 初始值 (首次出现)""] -.- P["0.45: hit=1 提升"]
+    O["0.3: 初始值 (首次出现)"] -.- P["0.45: hit=1 提升"]
     P -.- Q["0.6: hit=2"]
     Q -.- R["0.7: hit=3 达到 promotion 条件"]
 ```
