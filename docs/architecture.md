@@ -133,7 +133,7 @@ classDiagram
         -recentHashes string[]
         +observe(toolName, toolOutput) void
         +redact(text) string
-        +detectPreferences(text) object
+        +detectPreferences(text) ClassificationResult
         +summarizeSession(sessionId, instinct, decay, profile) Promise~void~
         +saveSnapshot(data) void
     }
@@ -279,7 +279,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     A[PostToolUse Hook 触发] --> B{工具在白名单?}
-    B -->|Read/Glob/listFiles/Bash/TaskList/TaskGet| C[跳过, 不处理]
+    B -->|Read/Glob/listFiles| C[跳过, 不处理]
     B -->|其他工具| D["读取 toolName + toolOutput<br>截断至 2048 chars"]
     D --> E[脱敏: 正则替换 API Key / Token / 路径]
     E --> F[内容长度 < 10?]
@@ -333,27 +333,26 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[SessionStart Hook] --> B["调用 getInitialContext()"]
-    B --> C["查询 semantic_memories<br>confidence>=0.7<br>排序: access*0.3+confidence*0.7"]
-    C --> D[取 Top-5 + profile 全部条目]
-    D --> E["组装 ~500 tokens<br>注入 system prompt"]
+    subgraph SessionStart
+        A[SessionStart Hook] --> B["调用 getInitialContext()"]
+        B --> C["查询 semantic_memories<br>confidence>=0.7<br>排序: access*0.3+confidence*0.7"]
+        C --> D[取 Top-5 + profile 全部条目]
+        D --> E["组装 ~500 tokens<br>注入 system prompt"]
+    end
+
+    subgraph UserPromptSubmit
+        F[用户输入] --> G["调用 recallRelevant(text)"]
+        G --> H[input → embedding → 向量检索 Top-10]
+        G --> I[BM25 FTS5 检索 Top-10]
+        H --> J[RRF 融合排序]
+        I --> J
+        J --> K[取 Top-3]
+        K --> L[更新 access_count + last_accessed]
+        L --> M[注入 additional_context]
+    end
 ```
 
-### 3.6 实时检索流程（UserPromptSubmit 内部检索）
-
-```mermaid
-flowchart TD
-    A[用户输入] --> B["调用 recallRelevant(text)"]
-    B --> C[input → embedding → 向量检索 Top-10]
-    B --> D[BM25 FTS5 检索 Top-10]
-    C --> E[RRF 融合排序]
-    D --> E
-    E --> F[取 Top-3]
-    F --> G[更新 access_count + last_accessed]
-    G --> H[注入 additional_context]
-```
-
-### 3.7 Instinct 进化流程
+### 3.6 Instinct 进化流程
 
 ```mermaid
 flowchart TD
@@ -376,7 +375,7 @@ flowchart TD
     Q -.- R["0.7: hit=3 达到 promotion 条件"]
 ```
 
-### 3.8 衰减流程
+### 3.7 衰减流程
 
 ```mermaid
 flowchart TD

@@ -6,7 +6,7 @@ import type { DecayEngine } from './decay.js';
 import type { ProfileEngine } from './profile.js';
 import { Anthropic } from '@anthropic-ai/sdk';
 
-const SKIP_TOOLS = new Set(['Read', 'Glob', 'listFiles', 'Bash', 'TaskList', 'TaskGet']);
+const SKIP_TOOLS = new Set(['Read', 'Glob', 'listFiles']);
 
 const SENSITIVE_PATTERNS: [RegExp, string][] = [
   [/api[_-]?key["']?\s*[:=]\s*["']?[\w-]{16,}/gi, 'API_KEY_REDACTED'],
@@ -33,6 +33,12 @@ const DECISION_PATTERNS = [
   /(use\s+\w+\s+because|migrating\s+(from|to)|switched\s+(from|to))/i,
   /(原因|理由|because|due to|目的是)/i,
 ];
+
+export interface ClassificationResult {
+  matched: boolean;
+  patternType: string | null;
+  confidence: number;
+}
 
 export class CaptureEngine {
   private recentHashes: string[] = [];
@@ -67,7 +73,7 @@ export class CaptureEngine {
     return result;
   }
 
-  detectPreferences(text: string): { matched: boolean; patternType: string | null; confidence: number } | null {
+  detectPreferences(text: string): ClassificationResult | null {
     for (const pattern of CORRECTION_PATTERNS) {
       if (pattern.test(text)) {
         return { matched: true, patternType: 'correction', confidence: 0.7 };
