@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { logger } from '../logger.js';
 
 export class ProfileEngine {
   constructor(private db: Database.Database) {}
@@ -28,8 +29,14 @@ export class ProfileEngine {
         updated_at = datetime('now')
     `);
 
+    let count = 0;
     for (const p of prefs) {
       upsertStmt.run(`tech_stack.${p.topic}`, p.value, p.confidence);
+      count++;
+    }
+
+    if (count > 0) {
+      logger.info(`profile: ${count} entries synced`);
     }
   }
 }

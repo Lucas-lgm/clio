@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import type Database from 'better-sqlite3';
+import { logger } from '../logger.js';
 
 export class InstinctEngine {
   constructor(private db: Database.Database) {}
@@ -8,6 +9,8 @@ export class InstinctEngine {
     const newMemories = this.db.prepare(
       'SELECT * FROM semantic_memories WHERE source_session = ?'
     ).all(sessionId) as any[];
+
+    let created = 0, promoted = 0;
 
     for (const mem of newMemories) {
       if (!mem.topic) continue;
@@ -27,12 +30,18 @@ export class InstinctEngine {
         if (confidence >= 0.7 && existing.status === 'pending') {
           this.promoteToSemantic(existing, sessionId);
           this.db.prepare("UPDATE instincts SET status = 'promoted' WHERE id = ?").run(existing.id);
+          promoted++;
         }
       } else {
         this.db.prepare(
           'INSERT INTO instincts (id, topic, value, confidence, hit_count) VALUES (?, ?, ?, 0.3, 1)'
         ).run(randomUUID(), mem.topic, mem.value);
+        created++;
       }
+    }
+
+    if (created > 0 || promoted > 0) {
+      logger.info(`instinct: ${created} created, ${promoted} promoted`);
     }
   }
 

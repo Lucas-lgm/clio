@@ -1,6 +1,7 @@
 import { connect } from 'net';
 import { getSocketPath } from '../ipc/server.js';
 import type { IpcRequest, IpcResponse } from '../ipc/protocol.js';
+import { logger } from '../logger.js';
 
 export function sendToClio(type: IpcRequest['type'], payload: Record<string, unknown> = {}): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -25,7 +26,14 @@ export function sendToClio(type: IpcRequest['type'], payload: Record<string, unk
       }
     });
 
-    client.on('error', reject);
-    setTimeout(() => { client.destroy(); reject(new Error('timeout')); }, 5000);
+    client.on('error', (err) => {
+      logger.error(`ipc error: ${err}`);
+      reject(err);
+    });
+    setTimeout(() => {
+      client.destroy();
+      logger.error(`ipc timeout: ${type}`);
+      reject(new Error('timeout'));
+    }, 5000);
   });
 }

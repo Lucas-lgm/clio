@@ -3,6 +3,7 @@ import { join } from 'path';
 import { unlinkSync, existsSync } from 'fs';
 import { getClioHome } from '../config.js';
 import type { IpcRequest, IpcResponse } from './protocol.js';
+import { logger } from '../logger.js';
 
 export function getSocketPath(): string {
   return join(getClioHome(), 'clio.sock');
@@ -19,6 +20,9 @@ export function startIpcServer(handler: RequestHandler): Promise<string> {
 
     const server = createServer((socket: Socket) => {
       let buffer = '';
+      socket.on('connect', () => {
+        logger.info('ipc connection accepted');
+      });
       socket.on('data', (chunk) => {
         buffer += chunk.toString();
         const newlineIdx = buffer.indexOf('\n');

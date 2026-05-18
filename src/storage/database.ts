@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { join } from 'path';
 import { load as loadVec0 } from 'sqlite-vec';
 import { getClioHome } from '../config.js';
+import { logger } from '../logger.js';
 
 let db: Database.Database | null = null;
 
@@ -13,11 +14,12 @@ export function getDb(): Database.Database {
   db.pragma('foreign_keys = ON');
   loadVec0(db);
   initSchema(db);
+  logger.info(`database ready: ${dbPath}`);
   return db;
 }
 
 export function closeDb(): void {
-  if (db) { db.close(); db = null; }
+  if (db) { db.close(); db = null; logger.info('database closed'); }
 }
 
 export function initSchema(database: Database.Database): void {

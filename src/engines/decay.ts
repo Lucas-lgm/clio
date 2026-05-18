@@ -1,11 +1,12 @@
 import type Database from 'better-sqlite3';
 import type { ClioConfig } from '../config.js';
+import { logger } from '../logger.js';
 
 export class DecayEngine {
   constructor(private db: Database.Database, private config: ClioConfig) {}
 
   run(): void {
-    this.db.prepare(`
+    const decayed = this.db.prepare(`
       UPDATE semantic_memories
       SET confidence = MAX(0, confidence - ? * CAST(
         (julianday('now') - julianday(last_accessed)) / 30 AS INTEGER
@@ -13,24 +14,32 @@ export class DecayEngine {
       WHERE is_archived = 0
         AND julianday('now') - julianday(last_accessed) > 30
     `).run(this.config.decay.confidence_decay_per_30d);
+    const decayCount = decayed.changes;
 
-    this.db.prepare(`
+    const archived = this.db.prepare(`
       UPDATE semantic_memories
       SET is_archived = 1
       WHERE confidence < ?
          OR (confidence < 0.3 AND last_accessed < datetime('now', '-90 days'))
     `).run(this.config.decay.archive_threshold);
+    const archiveCount = archived.changes;
 
-    this.db.prepare(`
+    const expired = this.db.prepare(`
       UPDATE instincts
       SET status = 'expired'
       WHERE status = 'pending'
         AND last_hit < datetime('now', ?)
     `).run(`-${this.config.decay.instinct_ttl_days} days`);
+    const expireCount = expired.changes;
 
-    this.db.prepare(`
+    const cleaned = this.db.prepare(`
       DELETE FROM working_memories
       WHERE created_at < datetime('now', '-7 days')
     `).run();
+    const cleanCount = cleaned.changes;
+
+    if (decayCount > 0 || archiveCount > 0 || expireCount > 0 || cleanCount > 0) {
+      logger.info(`decay: ${decayCount} decayed, ${archiveCount} archived, ${expireCount} instincts expired, ${cleanCount} working memories cleaned`);
+    }
   }
 }

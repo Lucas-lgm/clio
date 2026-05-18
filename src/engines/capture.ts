@@ -4,7 +4,9 @@ import type { ClioConfig } from '../config.js';
 import type { InstinctEngine } from './instinct.js';
 import type { DecayEngine } from './decay.js';
 import type { ProfileEngine } from './profile.js';
+import type { EmbeddingService } from '../storage/embedding.js';
 import { Anthropic } from '@anthropic-ai/sdk';
+import { logger } from '../logger.js';
 
 const SKIP_TOOLS = new Set(['Read', 'Glob', 'listFiles']);
 
@@ -97,13 +99,18 @@ export class CaptureEngine {
     instinct: InstinctEngine,
     decay: DecayEngine,
     profile: ProfileEngine,
+    embedding?: EmbeddingService,
   ): Promise<void> {
     const rows = this.db.prepare(
       'SELECT content FROM working_memories WHERE session_id = ? ORDER BY created_at'
     ).all(sessionId) as { content: string }[];
 
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+      logger.info(`summarize: no working memories for session ${sessionId}`);
+      return;
+    }
 
+    logger.info(`summarize: ${rows.length} working memories, extracting facts...`);
     const conversationText = rows.map(r => r.content).join('\n').slice(0, 10000);
 
     try {
@@ -112,11 +119,11 @@ export class CaptureEngine {
         max_tokens: 500,
         messages: [{
           role: 'user',
-          content: `从以下对话记录中提取 1-5 条关键信息。只包含:\n` +
-            `1. 用户明确的技术偏好\n` +
-            `2. 重要的技术决策（含理由）\n` +
-            `3. 纠正过 Claude 的内容\n` +
-            `请以 JSON 数组格式输出，每条包含 content, type (fact|preference|decision|pattern), topic, value。\n\n对话记录:\n${conversationText}`,
+          content: `Extract 1-5 key facts from this conversation log. Only include:\n` +
+            `1. Explicit technical preferences\n` +
+            `2. Important technical decisions (with reasons)\n` +
+            `3. Corrections made to Claude\n` +
+            `Output as JSON array, each item with content, type (fact|preference|decision|pattern), topic, value.\n\nConversation log:\n${conversationText}`,
         }],
       });
 
@@ -124,6 +131,7 @@ export class CaptureEngine {
       if (textBlock.type !== 'text') return;
       const parsed = JSON.parse(textBlock.text);
       const facts = Array.isArray(parsed) ? parsed : [parsed];
+      let savedCount = 0;
 
       for (const fact of facts) {
         if (!fact.content || fact.content.length < 20) continue;
@@ -133,6 +141,7 @@ export class CaptureEngine {
         ).get(fact.content);
         if (dup) continue;
 
+        savedCount++;
         const id = randomUUID();
         this.db.prepare(
           'INSERT INTO semantic_memories (id, content, memory_type, topic, value, source_session, confidence) VALUES (?, ?, ?, ?, ?, ?, 0.5)'
@@ -145,9 +154,23 @@ export class CaptureEngine {
             'INSERT INTO memories_fts (rowid, content, topic, value) VALUES (?, ?, ?, ?)'
           ).run(row.rowid, fact.content, fact.topic ?? '', fact.value ?? '');
         }
+
+        // Generate and store vector embedding
+        if (embedding?.isLoaded()) {
+          try {
+            const vector = await embedding.embed(this.redact(fact.content));
+            this.db.prepare(
+              'INSERT INTO memories_vec (id, embedding) VALUES (?, ?)'
+            ).run(id, Buffer.from(vector.buffer));
+          } catch {
+            // embedding failure is non-fatal
+          }
+        }
       }
+
+      logger.info(`summarize: saved ${savedCount} facts, running downstream engines...`);
     } catch (err) {
-      console.error('[clio] summarize error (non-fatal):', err);
+      logger.error('summarize error (non-fatal):', err);
     }
 
     instinct.detect(sessionId);

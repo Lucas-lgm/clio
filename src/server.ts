@@ -11,12 +11,13 @@ import { RecallEngine } from './engines/recall.js';
 import { InstinctEngine } from './engines/instinct.js';
 import { DecayEngine } from './engines/decay.js';
 import { ProfileEngine } from './engines/profile.js';
+import { logger } from './logger.js';
 
 const config = loadConfig();
 ensureClioHome();
 const db = getDb();
 
-console.error('[clio] starting...');
+logger.info('starting...');
 
 const embedding = new EmbeddingService();
 const capture = new CaptureEngine(db, config);
@@ -39,7 +40,7 @@ async function handleIpcRequest(req: IpcRequest): Promise<IpcResponse> {
       case 'recall_relevant':
         return { id: req.id, success: true, data: await recall.recallRelevant(payload['text'] as string) };
       case 'summarize_session':
-        await capture.summarizeSession(payload['sessionId'] as string, instinct, decay, profile);
+        await capture.summarizeSession(payload['sessionId'] as string, instinct, decay, profile, embedding);
         return { id: req.id, success: true };
       case 'save_session_snapshot':
         capture.saveSnapshot(payload as { sessionId: string; toolCount?: number });
@@ -55,12 +56,11 @@ async function handleIpcRequest(req: IpcRequest): Promise<IpcResponse> {
 async function main() {
   // Start IPC for hook scripts
   const socketPath = await startIpcServer(handleIpcRequest);
-  console.error(`[clio] ipc socket ready: ${socketPath}`);
+  logger.info(`ipc socket ready: ${socketPath}`);
 
   // Load embedding model (async)
-  console.error('[clio] loading embedding model...');
+  logger.info('loading embedding model...');
   await embedding.load();
-  console.error('[clio] embedding model loaded');
 
   // Start MCP server
   const server = new Server({ name: 'clio', version: '0.1.0' }, { capabilities: { tools: {} } });
@@ -110,10 +110,10 @@ async function main() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('[clio] mcp server ready');
+  logger.info('mcp server ready');
 }
 
 main().catch((err) => {
-  console.error('[clio] fatal:', err);
+  logger.error('fatal:', err);
   process.exit(1);
 });

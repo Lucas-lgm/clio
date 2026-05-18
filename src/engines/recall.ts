@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import type { ClioConfig } from '../config.js';
 import type { EmbeddingService } from '../storage/embedding.js';
+import { logger } from '../logger.js';
 
 export class RecallEngine {
   constructor(
@@ -21,6 +22,8 @@ export class RecallEngine {
     const profiles = this.db.prepare('SELECT key, value FROM profile').all() as any[];
 
     if (memories.length === 0 && profiles.length === 0) return '';
+
+    logger.info(`context: ${memories.length} memories, ${profiles.length} profile entries`);
 
     const lines: string[] = [];
     lines.push('<!-- clio: user profile -->');
@@ -64,11 +67,15 @@ export class RecallEngine {
         `).all(Buffer.from(queryVec.buffer)) as any[];
       }
     } catch {
-      // Vector search failed, use BM25 only
+      logger.warn('recall: vector search failed, falling back to BM25 only');
     }
 
     const fused = this.rrf(bm25Results, vectorResults);
     const topK = fused.slice(0, this.config.recall.top_k_realtime);
+
+    if (topK.length > 0) {
+      logger.info(`recall: ${bm25Results.length} bm25, ${vectorResults.length} vector, ${topK.length} returned`);
+    }
 
     for (const item of topK) {
       this.db.prepare(
