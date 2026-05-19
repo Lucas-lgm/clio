@@ -67,13 +67,24 @@ async function cmdInstall() {
   };
 
   claudeConfig.hooks = claudeConfig.hooks ?? {};
-  for (const name of ['session-start', 'prompt-submit', 'post-tool-use', 'pre-compact', 'stop']) {
-    const hookKey = name === 'session-start' ? 'SessionStart'
-      : name === 'prompt-submit' ? 'UserPromptSubmit'
-      : name === 'post-tool-use' ? 'PostToolUse'
-      : name === 'pre-compact' ? 'PreCompact'
-      : 'Stop';
-    claudeConfig.hooks[hookKey] = `CLIO_HOME=${home} node ${join(hooksDir, `${name}.js`)}`;
+  const hookConfig: Array<{ key: string; name: string }> = [
+    { key: 'SessionStart', name: 'session-start' },
+    { key: 'UserPromptSubmit', name: 'prompt-submit' },
+    { key: 'PostToolUse', name: 'post-tool-use' },
+    { key: 'PreCompact', name: 'pre-compact' },
+    { key: 'Stop', name: 'stop' },
+  ];
+  for (const { key, name } of hookConfig) {
+    claudeConfig.hooks[key] = [
+      {
+        hooks: [
+          {
+            type: 'command',
+            command: `CLIO_HOME=${home} node ${join(hooksDir, `${name}.js`)}`,
+          },
+        ],
+      },
+    ];
   }
 
   const dir = dirname(claudeConfigPath);
