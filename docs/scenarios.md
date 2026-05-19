@@ -76,7 +76,7 @@ Hook receives SessionStart event
        |     |- "preferences: ..." (from profile)
        |     └─ one line per memory: "fact: ..." / "preference: ..."
        |
-       |- 4. Count tokens, truncate if over budget_session_start (500)
+       |- 4. Cap at config.recall.top_k_startup entries (default 5)
        |
        └─ 5. Return assembled text -> Hook writes to stdout -> Claude system prompt
 ```
@@ -97,7 +97,7 @@ Hook receives SessionStart event
 |------|----------|
 | No memories exist | Return empty string -> no injection -> Claude behavior unchanged |
 | Fewer than 5 memories | Return however many exist |
-| Token over budget | Truncate from low-priority (low confidence) entries |
+| Memories exceed limit | Top N returned (sorted by confidence + access_count) |
 | IPC socket connection fails | Hook silently exits (try-catch swallowed) -> no injection |
 | Embedding model not loaded | No impact, getInitialContext doesn't depend on embedding |
 
@@ -260,7 +260,7 @@ Hook receives Stop event
            |- [A] Collect working memories
            |    |- Query working_memories WHERE session_id = ?
            |    |- Extract all content fields
-           |    └─ If empty -> skip LLM call, go to [F] cleanup
+           |    └─ If empty -> skip, return early (no downstream processing needed)
            |
            |- [B] LLM compression (only LLM call point)
            |    |- Assemble prompt:
@@ -284,7 +284,7 @@ Hook receives Stop event
            |    |- Redact: re-apply sensitive info regex
            |    |- Write to semantic_memories:
            |    |   └─ id, content, memory_type, topic, value,
-           |    |      confidence=0.5, source_session=sessionId
+           |    |      confidence=0.7, source_session=sessionId
            |    |- Index FTS5: INSERT INTO memories_fts
            |    └─ Index vector: call EmbeddingService.embed()
            |                     -> INSERT INTO memories_vec
