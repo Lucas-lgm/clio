@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
 import { load as loadVec0 } from 'sqlite-vec';
 import { initSchema } from '../src/storage/database.js';
-import { CaptureEngine, parseLooseJson } from '../src/engines/capture.js';
+import { CaptureEngine, parseLooseJson, redact, detectPreferences } from '../src/engines/capture.js';
 
 function createEngine(): CaptureEngine {
   const db = new Database(':memory:');
@@ -57,44 +57,44 @@ describe('parseLooseJson', () => {
 describe('CaptureEngine', () => {
   it('should redact API keys', () => {
     const engine = createEngine();
-    const result = engine.redact('my api_key = sk-abc123def456ghi789jkl012');
+    const result = redact('my api_key = sk-abc123def456ghi789jkl012');
     expect(result).not.toContain('sk-abc123');
     expect(result).toContain('API_KEY_REDACTED');
   });
 
   it('should redact AWS keys', () => {
     const engine = createEngine();
-    const result = engine.redact('key is AKIA1234567890123456');
+    const result = redact('key is AKIA1234567890123456');
     expect(result).toContain('AWS_KEY_REDACTED');
   });
 
   it('should redact user home paths', () => {
     const engine = createEngine();
-    const result = engine.redact('path is /Users/johndoe/projects/x');
+    const result = redact('path is /Users/johndoe/projects/x');
     expect(result).toContain('/Users/[USER]/');
   });
 
   it('should detect correction patterns', () => {
     const engine = createEngine();
-    const r = engine.detectPreferences('不对，这里应该用 async/await');
+    const r = detectPreferences('不对，这里应该用 async/await');
     expect(r?.patternType).toBe('correction');
   });
 
   it('should detect preference patterns', () => {
     const engine = createEngine();
-    const r = engine.detectPreferences('我喜欢用 pytest');
+    const r = detectPreferences('我喜欢用 pytest');
     expect(r?.patternType).toBe('preference');
   });
 
   it('should detect decision patterns', () => {
     const engine = createEngine();
-    const r = engine.detectPreferences('选择 FastAPI 因为性能好');
+    const r = detectPreferences('选择 FastAPI 因为性能好');
     expect(r?.patternType).toBe('decision');
   });
 
   it('should return null for normal chat', () => {
     const engine = createEngine();
-    const r = engine.detectPreferences('帮我写一个排序算法');
+    const r = detectPreferences('帮我写一个排序算法');
     expect(r).toBeNull();
   });
 
@@ -161,14 +161,10 @@ describe('CaptureEngine', () => {
   it('should handle empty session in summarizeSession early return', async () => {
     const engine = createEngine();
     // No working memories for this session → early return
-    // Pass minimal mocks for the downstream engines
-    const mockDb = (engine as any).db;
-    const mockInstinct = { detect: () => {} };
-    const mockDecay = { run: () => {} };
-    const mockProfile = { sync: () => {} };
-    await engine.summarizeSession('empty-session', mockInstinct as any, mockDecay as any, mockProfile as any);
+    await engine.summarizeSession('empty-session');
     // Should not throw, should not create semantic memories
-    const mems = mockDb.prepare('SELECT COUNT(*) as c FROM semantic_memories').get() as any;
+    const db = (engine as any).db;
+    const mems = db.prepare('SELECT COUNT(*) as c FROM semantic_memories').get() as any;
     expect(mems.c).toBe(0);
   });
 });

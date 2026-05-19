@@ -5,7 +5,7 @@ async function main() {
   if (!text) return;
 
   // Detect preferences (fire and forget)
-  sendToClio('detect_preferences', { text }).catch(() => {});
+  sendToClio('detect_preferences', { text, sessionId: process.env.CLAUDE_SESSION_ID }).catch(() => {});
 
   // Recall relevant memories
   const memories = await sendToClio('recall_relevant', { text }) as string | undefined;

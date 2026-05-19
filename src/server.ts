@@ -6,11 +6,12 @@ import { startIpcServer } from './ipc/server.js';
 import { loadConfig, ensureClioHome } from './config.js';
 import type { IpcRequest, IpcResponse } from './ipc/protocol.js';
 import { EmbeddingService } from './storage/embedding.js';
-import { CaptureEngine } from './engines/capture.js';
+import { CaptureEngine, detectPreferences } from './engines/capture.js';
 import { RecallEngine } from './engines/recall.js';
 import { InstinctEngine } from './engines/instinct.js';
 import { DecayEngine } from './engines/decay.js';
 import { ProfileEngine } from './engines/profile.js';
+import { SessionPipeline } from './engines/pipeline.js';
 import { logger } from './logger.js';
 
 const config = loadConfig();
@@ -20,11 +21,12 @@ const db = getDb();
 logger.info('starting...');
 
 const embedding = new EmbeddingService();
-const capture = new CaptureEngine(db, config);
+const capture = new CaptureEngine(db, config, embedding);
 const recall = new RecallEngine(db, config, embedding);
 const instinct = new InstinctEngine(db);
 const decay = new DecayEngine(db, config);
 const profile = new ProfileEngine(db);
+const pipeline = new SessionPipeline(capture, instinct, decay, profile);
 
 async function handleIpcRequest(req: IpcRequest): Promise<IpcResponse> {
   try {
@@ -34,14 +36,23 @@ async function handleIpcRequest(req: IpcRequest): Promise<IpcResponse> {
       case 'capture_observation':
         capture.observe(payload['toolName'] as string, payload['toolOutput'] as string, payload['sessionId'] as string | undefined);
         return { id: req.id, success: true };
-      case 'detect_preferences':
-        return { id: req.id, success: true, data: capture.detectPreferences(payload['text'] as string) };
+      case 'detect_preferences': {
+        const result = detectPreferences(payload['text'] as string);
+        if (result) {
+          capture.capturePreference(
+            payload['text'] as string,
+            result.patternType!,
+            payload['sessionId'] as string | undefined,
+          );
+        }
+        return { id: req.id, success: true, data: result };
+      }
       case 'recall_initial_context':
         return { id: req.id, success: true, data: recall.getInitialContext(projectPath) };
       case 'recall_relevant':
         return { id: req.id, success: true, data: await recall.recallRelevant(payload['text'] as string, projectPath) };
       case 'summarize_session':
-        await capture.summarizeSession(payload['sessionId'] as string, instinct, decay, profile, embedding, projectPath);
+        await pipeline.processSession(payload['sessionId'] as string, projectPath);
         return { id: req.id, success: true };
       case 'save_session_snapshot':
         capture.saveSnapshot({ ...payload as any, projectPath });
