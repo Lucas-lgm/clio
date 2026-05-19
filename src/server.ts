@@ -1,9 +1,11 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { writeFileSync, readFileSync, unlinkSync, existsSync } from 'fs';
+import { join } from 'path';
 import { getDb } from './storage/database.js';
 import { startIpcServer } from './ipc/server.js';
-import { loadConfig, ensureClioHome } from './config.js';
+import { loadConfig, ensureClioHome, getClioHome } from './config.js';
 import type { IpcRequest, IpcResponse } from './ipc/protocol.js';
 import { EmbeddingService } from './storage/embedding.js';
 import { CaptureEngine, detectPreferences } from './engines/capture.js';
@@ -16,6 +18,25 @@ import { logger } from './logger.js';
 
 const config = loadConfig();
 ensureClioHome();
+
+// Lock: kill any existing daemon, then start fresh
+const clioHome = getClioHome();
+const pidFile = join(clioHome, 'clio.pid');
+const socketFile = join(clioHome, 'clio.sock');
+try {
+  const existing = readFileSync(pidFile, 'utf-8').trim();
+  if (existing) {
+    try { process.kill(parseInt(existing, 10), 'SIGTERM'); } catch { /* stale */ }
+  }
+} catch { /* no pid file */ }
+// Clean up stale socket
+if (existsSync(socketFile)) unlinkSync(socketFile);
+// Write our PID
+writeFileSync(pidFile, String(process.pid));
+// Don't clean up pidFile on exit — a replacement daemon will overwrite it
+process.on('SIGINT', () => process.exit(0));
+process.on('SIGTERM', () => process.exit(0));
+
 const db = getDb();
 
 logger.info('starting...');
