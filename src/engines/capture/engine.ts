@@ -6,8 +6,9 @@ import { Anthropic } from '@anthropic-ai/sdk';
 import { logger } from '../../logger.js';
 import { redact, hashContent } from './redact.js';
 import { parseLooseJson } from './llm-parser.js';
+import { detectPreferences } from './patterns.js';
 
-export { parseLooseJson, redact };
+export { parseLooseJson, redact, detectPreferences };
 
 const SKIP_TOOLS = new Set(['Read', 'Glob', 'listFiles', 'Bash']);
 const SHORT_TOOLS = new Set(['Edit', 'Write']);

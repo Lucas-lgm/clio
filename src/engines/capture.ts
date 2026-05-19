@@ -1,1 +1,1 @@
-export { CaptureEngine, parseLooseJson, redact } from './capture/engine.js';
+export { CaptureEngine, parseLooseJson, redact, detectPreferences } from './capture/engine.js';
