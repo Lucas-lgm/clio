@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, rmSync, readdirSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -7,6 +7,8 @@ import { spawn } from 'child_process';
 import { ensureClioHome, getClioHome } from './config.js';
 import { getDb, closeDb } from './storage/database.js';
 import { EmbeddingService } from './storage/embedding.js';
+import { exportEnvironment } from './export.js';
+import { importEnvironment } from './import.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -99,13 +101,49 @@ async function cmdStatus() {
   const memCount = (db.prepare('SELECT COUNT(*) as c FROM semantic_memories').get() as any).c;
   const instCount = (db.prepare("SELECT COUNT(*) as c FROM instincts WHERE status = 'pending'").get() as any).c;
   const profileCount = (db.prepare('SELECT COUNT(*) as c FROM profile').get() as any).c;
+  const sessionCount = (db.prepare('SELECT COUNT(*) as c FROM sessions').get() as any).c;
   closeDb();
+
+  // User skills count
+  const userSkillsDir = join(homedir(), '.claude', 'skills');
+  let skillCount = 0;
+  try { skillCount = readdirSync(userSkillsDir).filter(f => f.endsWith('.md')).length; } catch {}
+
+  const dbSize = existsSync(dbPath) ? (readFileSync(dbPath).length / 1024).toFixed(0) : '0';
 
   console.log(`Clio status:
   Home:              ${home}
+  DB size:           ${dbSize} KB
+  Sessions:          ${sessionCount}
   Semantic memories: ${memCount}
   Pending instincts: ${instCount}
-  Profile entries:   ${profileCount}`);
+  Profile entries:   ${profileCount}
+  User skills:       ${skillCount}`);
+}
+
+async function cmdExport() {
+  const outPath = process.argv[3] || join(process.cwd(), `clio-env-${new Date().toISOString().slice(0, 10)}.tar.gz`);
+  console.log(`[clio] exporting environment to ${outPath}...`);
+  const result = exportEnvironment(outPath);
+  console.log(`\n✓ Exported: ${result}`);
+}
+
+async function cmdImport() {
+  const inputPath = process.argv[3];
+  if (!inputPath) {
+    console.error('Usage: clio import <archive.tar.gz> [--dry-run] [--force]');
+    process.exit(1);
+  }
+
+  const dryRun = process.argv.includes('--dry-run');
+  const force = process.argv.includes('--force');
+
+  try {
+    importEnvironment(inputPath, { dryRun, force });
+  } catch (err: any) {
+    console.error(`✗ Import failed: ${err.message}`);
+    process.exit(1);
+  }
 }
 
 async function cmdStart() {
@@ -196,4 +234,6 @@ else if (cmd === 'status') cmdStatus().catch(console.error);
 else if (cmd === 'start') cmdStart().catch(console.error);
 else if (cmd === 'stop') cmdStop().catch(console.error);
 else if (cmd === 'download-models') cmdDownloadModels().catch(console.error);
-else console.log('Usage: clio install | start | stop | status | download-models');
+else if (cmd === 'export') cmdExport().catch(console.error);
+else if (cmd === 'import') cmdImport();
+else console.log('Usage: clio install | start | stop | status | download-models | export | import');

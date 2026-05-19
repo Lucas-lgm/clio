@@ -1,7 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { ClioConfig } from '../config.js';
 import type { EmbeddingService } from '../storage/embedding.js';
-import type { SkillManifest } from './skill.js';
 import { logger } from '../logger.js';
 
 export class RecallEngine {
@@ -11,7 +10,7 @@ export class RecallEngine {
     private embedding: EmbeddingService,
   ) {}
 
-  getInitialContext(projectPath?: string, skills?: SkillManifest[]): string {
+  getInitialContext(projectPath?: string): string {
     const scope = projectPath ?? '';
     const memories = this.db.prepare(`
       SELECT content, memory_type, topic, value
@@ -53,14 +52,6 @@ export class RecallEngine {
 
     for (const mem of memories) {
       lines.push(`- ${mem.memory_type}: ${mem.content}`);
-    }
-
-    if (skills && skills.length > 0) {
-      lines.push('');
-      lines.push('## Available Skills (use via /use <name> or the use_skill tool)');
-      for (const s of skills) {
-        lines.push(`- ${s.name}: ${s.description}`);
-      }
     }
 
     return lines.join('\n');

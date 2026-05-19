@@ -125,17 +125,4 @@ describe('RecallEngine', () => {
     expect(await recall.recallRelevant('ab')).toBe('');
   });
 
-  it('should include skills manifest in getInitialContext', () => {
-    const db = createDb();
-    const recall = new RecallEngine(db, {
-      recall: { budget_session_start: 500, budget_per_query: 300, top_k_startup: 5, top_k_realtime: 3 },
-      capture: {} as any, decay: {} as any, storage: {} as any,
-    } as any, { isLoaded: () => false } as any);
-
-    const ctx = recall.getInitialContext(undefined, [
-      { name: 'Git Commit', description: 'Write commit messages', keywords: 'commit' },
-    ]);
-    expect(ctx).toContain('Available Skills');
-    expect(ctx).toContain('Git Commit');
-  });
 });

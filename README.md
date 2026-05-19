@@ -1,72 +1,62 @@
 # Clio
 
-**Memory that follows you across sessions. Skills that evolve on their own.**
+**Claude Code 的跨会话记忆层。**
 
-Clio is a memory and skill evolution system for Claude Code. Install once, and Claude starts remembering your preferences, technical decisions, and recurring patterns — automatically, across projects and sessions.
+每次 session 从零开始太蠢了。clio 让 Claude 记住你的偏好、决策和模式 —— 自动捕获、混合检索、跨会话召回。
 
-> ⚠️ **Alpha** — Actively developed. Things will change, but it works today.
+> ⚙️ 附赠环境迁移：一条命令打包你的 Claude 环境（记忆 + 设置 + skill），任意机器恢复。
 
 ---
 
-## Features
+## Why
 
-### 🧠 Persistent Memory
-Claude remembers your tech stack preferences, past decisions, and corrections — no need to re-explain every session.
+Claude Code 每次会话不记得过去。你说"用 asyncpg 别用 psycopg2"，下个 session 它又问你用哪个。半年前的决定没人去删，CLAUDE.md 永远过时。
 
-### 🔍 Hybrid Search
-BM25 keyword search + vector embeddings + RRF fusion. Relevant memories surface when you need them, even with partial or fuzzy queries.
+Clio 不替代 Claude Code 的任何功能。它只填补一个空白：**跨会话记忆**。
 
-### 📈 Instinct System
-Repeated patterns automatically evolve: low-confidence "instincts" get promoted to semantic memory when a pattern is confirmed across multiple sessions.
+## What We Don't Do
 
-### 🧩 MCP Tools
-Full memory management via Claude Code slash commands: `/remember`, `/memory recall`, `/memory forget`, `/profile show`, `/instinct list`.
+| 不做 | 原因 |
+|------|------|
+| Skill 平台 | skill 全部使用 Claude Code 生态的 `~/.claude/skills/` |
+| 默认 / 内置 skill | 不捆绑任何 skill |
+| 内容生成 | 只观察、记忆、召回，不写代码不回答问题 |
+| 云端服务 | 纯本地，无 telemetry 无外部服务 |
 
-### 🔒 Privacy First
-All data stored locally in SQLite. API keys, tokens, and paths are auto-redacted before storage. No external services, no telemetry.
+---
+
+## How It Works
+
+```
+Claude Code  ◀──▶  Clio Daemon
+                      ├── Capture Engine   — 观察工具输出，自动提取偏好和决策
+                      ├── Recall Engine    — BM25 + 向量混合搜索 + RRF 融合
+                      ├── Instinct Engine  — 跨会话模式晋升
+                      ├── Decay Engine     — 置信度衰减，不常用的自动归档
+                      └── Profile Engine   — 用户画像提取
+```
+
+### Capture
+- **操作时**：工具输出 → 脱敏 → 去重 → 写入工作记忆
+- **会话结束**：LLM 压缩工作记忆 → 语义记忆 + 向量索引
+
+### Recall
+- **会话启动**：Top-5 高置信度记忆 + 画像注入 system prompt
+- **每次查询**：实时混合搜索，相关记忆注入 additional_context
 
 ---
 
 ## Quick Start
 
 ```bash
-# Install globally
 npm install -g @clio/cli
-
-# Configure Claude Code hooks and MCP server
 clio install
-
-# Start a new Claude Code session
-# Memory is automatic from here.
+# 开新 session。记忆自动生效。
 ```
 
 ### Requirements
-
 - Node.js 20+
 - Claude Code (latest)
-
----
-
-## How It Works
-
-Clio runs as a single Node.js daemon alongside Claude Code, communicating through Unix sockets.
-
-```
-Claude Code  ◀──▶  Clio Daemon
-                      ├── Capture Engine   — observes tool output, detects preferences
-                      ├── Recall Engine    — hybrid BM25 + vector search
-                      ├── Instinct Engine  — cross-session pattern detection
-                      ├── Decay Engine     — Ebbinghaus-inspired forgetting curve
-                      └── Profile Engine   — auto-extracted user preferences
-```
-
-**Capture** happens at two levels:
-- **Per tool call**: Output is redacted, deduplicated, and stored as working memory
-- **Per session end**: LLM compresses working memories into semantic memories with vector embeddings
-
-**Recall** happens at two points:
-- **Session start**: Top-5 high-confidence memories + profile injected into system prompt
-- **On each query**: Real-time hybrid search, results injected as additional context
 
 ---
 
@@ -74,8 +64,9 @@ Claude Code  ◀──▶  Clio Daemon
 
 | Document | Description |
 |----------|-------------|
-| [Architecture](docs/architecture.md) | ER diagrams, class diagrams, flowcharts |
-| [Scenarios](docs/scenarios.md) | Complete business logic for every trigger point |
+| [Positioning](docs/positioning.md) | 项目边界和生态关系 |
+| [Architecture](docs/architecture.md) | ER 图、类图、流程图 |
+| [Scenarios](docs/scenarios.md) | 完整触发点逻辑 |
 
 ---
 
@@ -88,10 +79,6 @@ npm install
 npm run build
 npm test
 ```
-
-## Contributing
-
-Contributions are welcome. Open an issue or pull request.
 
 ---
 

@@ -77,7 +77,7 @@ export function initSchema(database: Database.Database): void {
       description TEXT NOT NULL,
       keywords TEXT NOT NULL DEFAULT '',
       content TEXT NOT NULL,
-      type TEXT NOT NULL DEFAULT 'user' CHECK(type IN ('builtin','user','auto')),
+      type TEXT NOT NULL DEFAULT 'user' CHECK(type IN ('builtin','community','user','auto')),
       usage_count INTEGER DEFAULT 0,
       success_count INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
