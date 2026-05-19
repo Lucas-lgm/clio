@@ -9,6 +9,7 @@ import { getDb, closeDb } from './storage/database.js';
 import { EmbeddingService } from './storage/embedding.js';
 import { exportEnvironment } from './export.js';
 import { importEnvironment } from './import.js';
+import type { CountResult } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -51,7 +52,7 @@ async function cmdInstall() {
 
   // 5. Update ~/.claude/settings.json
   const claudeConfigPath = getClaudeConfigPath();
-  let claudeConfig: any = {};
+  let claudeConfig: Record<string, unknown> = {};
 
   if (existsSync(claudeConfigPath)) {
     try { claudeConfig = JSON.parse(readFileSync(claudeConfigPath, 'utf-8')); } catch {}
@@ -59,14 +60,15 @@ async function cmdInstall() {
 
   const hooksDir = join(__dirname, 'hooks');
 
-  claudeConfig.mcpServers = claudeConfig.mcpServers ?? {};
-  claudeConfig.mcpServers.clio = {
+  const mcpServers = (claudeConfig.mcpServers as Record<string, unknown>) ?? {};
+  mcpServers.clio = {
     command: 'node',
     args: [join(__dirname, 'server.js')],
     env: { CLIO_HOME: home },
   };
+  claudeConfig.mcpServers = mcpServers;
 
-  claudeConfig.hooks = claudeConfig.hooks ?? {};
+  const hooks = (claudeConfig.hooks as Record<string, unknown>) ?? {};
   const hookConfig: Array<{ key: string; name: string }> = [
     { key: 'SessionStart', name: 'session-start' },
     { key: 'UserPromptSubmit', name: 'prompt-submit' },
@@ -75,7 +77,7 @@ async function cmdInstall() {
     { key: 'Stop', name: 'stop' },
   ];
   for (const { key, name } of hookConfig) {
-    claudeConfig.hooks[key] = [
+    hooks[key] = [
       {
         hooks: [
           {
@@ -86,6 +88,7 @@ async function cmdInstall() {
       },
     ];
   }
+  claudeConfig.hooks = hooks;
 
   const dir = dirname(claudeConfigPath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -109,10 +112,10 @@ async function cmdStatus() {
   }
 
   const db = getDb();
-  const memCount = (db.prepare('SELECT COUNT(*) as c FROM semantic_memories').get() as any).c;
-  const instCount = (db.prepare("SELECT COUNT(*) as c FROM instincts WHERE status = 'pending'").get() as any).c;
-  const profileCount = (db.prepare('SELECT COUNT(*) as c FROM profile').get() as any).c;
-  const sessionCount = (db.prepare('SELECT COUNT(*) as c FROM sessions').get() as any).c;
+  const memCount = (db.prepare('SELECT COUNT(*) as c FROM semantic_memories').get() as CountResult).c;
+  const instCount = (db.prepare("SELECT COUNT(*) as c FROM instincts WHERE status = 'pending'").get() as CountResult).c;
+  const profileCount = (db.prepare('SELECT COUNT(*) as c FROM profile').get() as CountResult).c;
+  const sessionCount = (db.prepare('SELECT COUNT(*) as c FROM sessions').get() as CountResult).c;
   closeDb();
 
   // User skills count
@@ -151,8 +154,9 @@ async function cmdImport() {
 
   try {
     importEnvironment(inputPath, { dryRun, force });
-  } catch (err: any) {
-    console.error(`✗ Import failed: ${err.message}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`✗ Import failed: ${message}`);
     process.exit(1);
   }
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type Database from 'better-sqlite3';
 import { logger } from '../logger.js';
+import type { SemanticMemoryRow, InstinctRow } from '../types.js';
 
 export class InstinctEngine {
   constructor(private db: Database.Database) {}
@@ -8,7 +9,7 @@ export class InstinctEngine {
   detect(sessionId: string): void {
     const newMemories = this.db.prepare(
       'SELECT * FROM semantic_memories WHERE source_session = ?'
-    ).all(sessionId) as any[];
+    ).all(sessionId) as SemanticMemoryRow[];
 
     let created = 0, promoted = 0;
 
@@ -17,7 +18,7 @@ export class InstinctEngine {
 
       const existing = this.db.prepare(
         'SELECT * FROM instincts WHERE topic = ? AND value = ?'
-      ).get(mem.topic, mem.value) as any | undefined;
+      ).get(mem.topic, mem.value) as InstinctRow | undefined;
 
       if (existing) {
         const hitCount = existing.hit_count + 1;
@@ -45,7 +46,7 @@ export class InstinctEngine {
     }
   }
 
-  private promoteToSemantic(instinct: any, sessionId: string): void {
+  private promoteToSemantic(instinct: InstinctRow, sessionId: string): void {
     const existing = this.db.prepare(
       "SELECT id FROM semantic_memories WHERE memory_type = 'pattern' AND topic = ? AND value = ?"
     ).get(instinct.topic, instinct.value);

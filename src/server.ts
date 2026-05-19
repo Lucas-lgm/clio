@@ -4,6 +4,7 @@ import { getDb } from './storage/database.js';
 import { startIpcServer } from './ipc/server.js';
 import { loadConfig, ensureClioHome, getClioHome } from './config.js';
 import type { IpcRequest, IpcResponse } from './ipc/protocol.js';
+import type { SessionPayload } from './types.js';
 import { EmbeddingService } from './storage/embedding.js';
 import { CaptureEngine } from './engines/capture.js';
 import { RecallEngine } from './engines/recall.js';
@@ -65,13 +66,14 @@ async function handleIpcRequest(req: IpcRequest): Promise<IpcResponse> {
         await pipeline.processSession(payload['sessionId'] as string, projectPath);
         return { id: req.id, success: true };
       case 'save_session_snapshot':
-        capture.saveSnapshot({ ...payload as any, projectPath });
+        capture.saveSnapshot({ ...payload as unknown as SessionPayload, projectPath });
         return { id: req.id, success: true };
       default:
         return { id: req.id, success: false, error: 'unknown request type' };
     }
-  } catch (err: any) {
-    return { id: req.id, success: false, error: err.message };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { id: req.id, success: false, error: message };
   }
 }
 

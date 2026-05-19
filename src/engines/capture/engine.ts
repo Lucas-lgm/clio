@@ -7,6 +7,7 @@ import { logger } from '../../logger.js';
 import { redact, hashContent } from './redact.js';
 import { parseLooseJson } from './llm-parser.js';
 import { detectPreferences } from './patterns.js';
+import type { FactResult, RowIdResult } from '../../types.js';
 
 export { parseLooseJson, redact, detectPreferences };
 
@@ -79,14 +80,14 @@ export class CaptureEngine {
         }],
       });
 
-      const textBlock = response.content.find(b => b.type === 'text') as any;
+      const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
       if (!textBlock) return;
 
       let raw = textBlock.text.trim();
       raw = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
       const parsed = parseLooseJson(raw);
-      const facts = (Array.isArray(parsed) ? parsed : [parsed]).map((f: any) =>
-        typeof f === 'string' ? { content: f, type: 'fact', topic: null, value: null } : f
+      const facts: FactResult[] = (Array.isArray(parsed) ? parsed : [parsed]).map((f) =>
+        typeof f === 'string' ? { content: f, type: 'fact', topic: null, value: null } : f as FactResult
       );
       let savedCount = 0;
 
@@ -104,7 +105,7 @@ export class CaptureEngine {
           'INSERT INTO semantic_memories (id, content, memory_type, topic, value, source_session, confidence, project_path) VALUES (?, ?, ?, ?, ?, ?, 0.7, ?)'
         ).run(id, redact(fact.content), fact.type ?? 'fact', fact.topic ?? null, fact.value ?? null, sessionId, prjPath);
 
-        const row = this.db.prepare('SELECT rowid FROM semantic_memories WHERE id = ?').get(id) as any;
+        const row = this.db.prepare('SELECT rowid FROM semantic_memories WHERE id = ?').get(id) as RowIdResult | undefined;
         if (row) {
           this.db.prepare(
             'INSERT INTO memories_fts (rowid, content, topic, value) VALUES (?, ?, ?, ?)'

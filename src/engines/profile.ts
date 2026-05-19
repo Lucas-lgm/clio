@@ -1,6 +1,14 @@
 import type Database from 'better-sqlite3';
 import { logger } from '../logger.js';
 
+interface PrefRow {
+  topic: string;
+  value: string;
+  confidence: number;
+  memory_type: string;
+  project_path: string;
+}
+
 const KEY_MAP: Record<string, string> = {
   'language': 'code_style.language',
   'framework': 'tech_stack.framework',
@@ -26,7 +34,7 @@ export class ProfileEngine {
         AND confidence >= 0.7
         AND topic IS NOT NULL
         AND value IS NOT NULL
-    `).all() as any[];
+    `).all() as PrefRow[];
 
     const upsertStmt = this.db.prepare(`
       INSERT INTO profile (key, value, confidence, source, project_path, updated_at)

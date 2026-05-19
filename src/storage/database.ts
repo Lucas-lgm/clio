@@ -3,6 +3,7 @@ import { join } from 'path';
 import { load as loadVec0 } from 'sqlite-vec';
 import { getClioHome } from '../config.js';
 import { logger } from '../logger.js';
+import type { ColumnInfo } from '../types.js';
 
 let db: Database.Database | null = null;
 
@@ -97,7 +98,7 @@ export function initSchema(database: Database.Database): void {
   `);
 
   // Profile table needs special handling for migration to composite key
-  const profileCols = database.prepare("PRAGMA table_info('profile')").all() as any[];
+  const profileCols = database.prepare("PRAGMA table_info('profile')").all() as ColumnInfo[];
   if (profileCols.length === 0) {
     // New database — create with project_path from the start
     database.exec(`
@@ -115,13 +116,13 @@ export function initSchema(database: Database.Database): void {
   }
 
   // Migration: add project_path to semantic_memories
-  const smCols = database.prepare("PRAGMA table_info('semantic_memories')").all() as any[];
-  if (!smCols.some((c: any) => c.name === 'project_path')) {
+  const smCols = database.prepare("PRAGMA table_info('semantic_memories')").all() as ColumnInfo[];
+  if (!smCols.some((c) => c.name === 'project_path')) {
     database.exec("ALTER TABLE semantic_memories ADD COLUMN project_path TEXT NOT NULL DEFAULT ''");
   }
 
   // Migration: upgrade profile from old schema
-  if (profileCols.length > 0 && !profileCols.some((c: any) => c.name === 'project_path')) {
+  if (profileCols.length > 0 && !profileCols.some((c) => c.name === 'project_path')) {
     database.exec("ALTER TABLE profile RENAME TO profile_old");
     database.exec(`
       CREATE TABLE profile (

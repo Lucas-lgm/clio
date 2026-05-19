@@ -3,6 +3,28 @@ import type { ClioConfig } from '../config.js';
 import type { EmbeddingService } from '../storage/embedding.js';
 import { logger } from '../logger.js';
 
+interface MemoryRow {
+  content: string;
+  memory_type: string;
+  topic: string | null;
+  value: string | null;
+}
+
+interface ProfileRow {
+  key: string;
+  value: string;
+  confidence: number;
+}
+
+interface BM25Row extends MemoryRow {
+  id: string;
+  confidence: number;
+}
+
+interface VectorRow extends BM25Row {
+  distance: number;
+}
+
 export class RecallEngine {
   constructor(
     private db: Database.Database,
@@ -19,14 +41,14 @@ export class RecallEngine {
         AND (project_path = ? OR project_path = '')
       ORDER BY (access_count * 0.3 + confidence * 0.7) DESC
       LIMIT ?
-    `).all(scope, this.config.recall.top_k_startup) as any[];
+    `).all(scope, this.config.recall.top_k_startup) as MemoryRow[];
 
     // Profile: project-level entries preferred, global fills gaps
     const profileRows = this.db.prepare(
       "SELECT key, value, confidence FROM profile WHERE confidence >= 0.5 AND (project_path = ? OR project_path = '') ORDER BY key, CASE WHEN project_path = ? THEN 0 ELSE 1 END, confidence DESC"
-    ).all(scope, scope) as any[];
+    ).all(scope, scope) as ProfileRow[];
     const seen = new Set<string>();
-    const profiles: any[] = [];
+    const profiles: ProfileRow[] = [];
     for (const p of profileRows) {
       if (!seen.has(p.key)) {
         seen.add(p.key);
@@ -70,9 +92,9 @@ export class RecallEngine {
         AND (sm.project_path = ? OR sm.project_path = '')
       ORDER BY rank
       LIMIT 10
-    `).all(this.escapeFts5(query), scope) as any[];
+    `).all(this.escapeFts5(query), scope) as BM25Row[];
 
-    let vectorResults: any[] = [];
+    let vectorResults: VectorRow[] = [];
     try {
       if (this.embedding.isLoaded()) {
         const queryVec = await this.embedding.embed(query);
@@ -85,7 +107,7 @@ export class RecallEngine {
             AND (sm.project_path = ? OR sm.project_path = '')
           ORDER BY distance
           LIMIT 10
-        `).all(Buffer.from(queryVec.buffer), scope) as any[];
+        `).all(Buffer.from(queryVec.buffer), scope) as VectorRow[];
       }
     } catch {
       logger.warn('recall: vector search failed, falling back to BM25 only');
@@ -106,11 +128,11 @@ export class RecallEngine {
 
     if (topK.length === 0) return '';
 
-    return topK.map((m: any) => `${m.memory_type}: ${m.content}`).join('\n');
+    return topK.map((m) => `${m.memory_type}: ${m.content}`).join('\n');
   }
 
-  private rrf(bm25: any[], vector: any[], k = 60): any[] {
-    const scores = new Map<string, { item: any; score: number }>();
+  private rrf(bm25: BM25Row[], vector: VectorRow[], k = 60): BM25Row[] {
+    const scores = new Map<string, { item: BM25Row; score: number }>();
     for (const [rank, item] of bm25.entries()) {
       scores.set(item.id, { item, score: 1 / (k + rank) });
     }
