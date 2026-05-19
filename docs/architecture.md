@@ -132,9 +132,8 @@ classDiagram
         -anthropic Anthropic
         -recentHashes string[]
         +observe(toolName, toolOutput) void
-        +redact(text) string
-        +detectPreferences(text) ClassificationResult
-        +summarizeSession(sessionId, instinct, decay, profile) Promise~void~
+        +capturePreference(text, patternType, sessionId?) void
+        +summarizeSession(sessionId, projectPath?) Promise~void~
         +saveSnapshot(data) void
     }
 
@@ -163,6 +162,14 @@ classDiagram
     class ProfileEngine {
         -db Database
         +sync() void
+    }
+
+    class SessionPipeline {
+        -capture CaptureEngine
+        -instinct InstinctEngine
+        -decay DecayEngine
+        -profile ProfileEngine
+        +processSession(sessionId, projectPath?) Promise~void~
     }
 
     class IpcServer {
@@ -214,7 +221,13 @@ classDiagram
     ClioServer --> InstinctEngine : creates
     ClioServer --> DecayEngine : creates
     ClioServer --> ProfileEngine : creates
+    ClioServer --> SessionPipeline : creates
     ClioServer --> IpcServer : starts
+
+    SessionPipeline --> CaptureEngine : calls (summarize)
+    SessionPipeline --> InstinctEngine : calls (detect)
+    SessionPipeline --> DecayEngine : calls (run)
+    SessionPipeline --> ProfileEngine : calls (sync)
 
     CaptureEngine --> Database : uses
     CaptureEngine --> AnthropicSDK : calls (summarize)
@@ -242,7 +255,8 @@ Engines depend on Storage, not on each other
   ┌──────────────────────┐
   │  ClioServer          │  ← single entry point composing all modules
   ├──────────────────────┤
-  │  CaptureEngine       │  ← calls InstinctEngine + DecayEngine + ProfileEngine
+  │  SessionPipeline     │  ← orchestrates: CaptureEngine ➔ InstinctEngine ➔ DecayEngine ➔ ProfileEngine
+  │  CaptureEngine       │  ← standalone (capture + LLM summarization only)
   │  RecallEngine        │  ← standalone, only depends on Database + EmbeddingService
   │  InstinctEngine      │  ← standalone
   │  DecayEngine         │  ← standalone
@@ -323,10 +337,11 @@ flowchart TD
     H -->|new valid memory| J["Write to semantic_memories"]
     J --> K["Update FTS5 index"]
     K --> L["Generate vector embedding -> write to memories_vec"]
-    L --> M["Trigger InstinctEngine.detect()"]
-    M --> N["Trigger DecayEngine.run()"]
-    N --> O["Trigger ProfileEngine.sync()"]
-    O --> P["Clean up working_memories for this session"]
+    L --> M["SessionPipeline.processSession()"]
+    M --> N["Trigger InstinctEngine.detect()"]
+    N --> O["Trigger DecayEngine.run()"]
+    O --> P["Trigger ProfileEngine.sync()"]
+    P --> Q["Clean up working_memories for this session"]
 ```
 
 ### 3.5 Recall Flow (SessionStart + UserPromptSubmit)
@@ -389,6 +404,7 @@ flowchart TD
     H -->|yes| I["is_archived = 1"]
     H -->|no| J["Keep"]
     C --> K{"More memories?"}
+
     K -->|yes| C
     K -->|no| L["Expire old instincts"]
     L --> M["status = 'expired'<br>last_hit > 30 days ago"]
@@ -433,7 +449,8 @@ sequenceDiagram
 
     CC->>Hook: Stop
     Hook->>IPC: send('summarize_session', { sessionId })
-    IPC->>Clio: CaptureEngine.summarizeSession()
+    IPC->>Clio: SessionPipeline.processSession()
+    Clio->>Clio: CaptureEngine.summarizeSession()
     Clio->>Clio: collect working_memories
     Clio->>Clio: LLM: extract facts
     Clio->>Clio: store + index + embed
