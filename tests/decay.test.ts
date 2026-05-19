@@ -84,46 +84,22 @@ describe('DecayEngine', () => {
     expect(remaining[0].id).toBe('w2');
   });
 
-  it('should clean low-confidence profile entries', () => {
+  it('should never clean profile entries', () => {
     const db = new Database(':memory:');
     loadVec0(db);
     initSchema(db);
     db.prepare(
       "INSERT INTO profile (key, value, confidence) VALUES (?, ?, ?)"
     ).run('code_style.language', 'python', 0.05);
-
-    const engine = new DecayEngine(db, { decay: { confidence_decay_per_30d: 0.1, archive_threshold: 0.2, instinct_ttl_days: 30 } } as any);
-    engine.run();
-
-    const remaining = db.prepare('SELECT COUNT(*) as c FROM profile').get() as any;
-    expect(remaining.c).toBe(0);
-  });
-
-  it('should clean stale low-confidence profile entries with old updated_at', () => {
-    const db = new Database(':memory:');
-    loadVec0(db);
-    initSchema(db);
     db.prepare(
       "INSERT INTO profile (key, value, confidence, updated_at) VALUES (?, ?, ?, datetime('now', '-100 days'))"
     ).run('code_style.quotes', 'single', 0.2);
-
-    const engine = new DecayEngine(db, { decay: { confidence_decay_per_30d: 0.1, archive_threshold: 0.1, instinct_ttl_days: 30 } } as any);
-    engine.run();
-
-    const remaining = db.prepare('SELECT COUNT(*) as c FROM profile').get() as any;
-    expect(remaining.c).toBe(0);
-  });
-
-  it('should keep high-confidence profile entries', () => {
-    const db = new Database(':memory:');
-    loadVec0(db);
-    initSchema(db);
     db.prepare("INSERT INTO profile (key, value, confidence) VALUES (?, ?, ?)").run('tech_stack.database', 'asyncpg', 0.8);
 
     const engine = new DecayEngine(db, { decay: { confidence_decay_per_30d: 0.1, archive_threshold: 0.1, instinct_ttl_days: 30 } } as any);
     engine.run();
 
     const remaining = db.prepare('SELECT COUNT(*) as c FROM profile').get() as any;
-    expect(remaining.c).toBe(1);
+    expect(remaining.c).toBe(3);
   });
 });

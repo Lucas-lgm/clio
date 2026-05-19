@@ -38,15 +38,8 @@ export class DecayEngine {
     `).run();
     const cleanCount = cleaned.changes;
 
-    const profileCleaned = this.db.prepare(`
-      DELETE FROM profile
-      WHERE confidence < ?
-         OR (confidence < 0.3 AND updated_at < datetime('now', '-90 days'))
-    `).run(this.config.decay.archive_threshold);
-    const profileCount = profileCleaned.changes;
-
-    if (decayCount > 0 || archiveCount > 0 || expireCount > 0 || cleanCount > 0 || profileCount > 0) {
-      logger.info(`decay: ${decayCount} decayed, ${archiveCount} archived, ${expireCount} instincts expired, ${cleanCount} working memories cleaned, ${profileCount} profile entries removed`);
+    if (decayCount > 0 || archiveCount > 0 || expireCount > 0 || cleanCount > 0) {
+      logger.info(`decay: ${decayCount} decayed, ${archiveCount} archived, ${expireCount} instincts expired, ${cleanCount} working memories cleaned`);
     }
   }
 }
