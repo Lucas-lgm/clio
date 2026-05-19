@@ -103,10 +103,10 @@ export class RecallEngine {
           FROM memories_vec v
           JOIN semantic_memories sm ON sm.id = v.id
           WHERE v.embedding MATCH ?
+            AND v.k = 10
             AND sm.is_archived = 0
             AND (sm.project_path = ? OR sm.project_path = '')
           ORDER BY distance
-          LIMIT 10
         `).all(Buffer.from(queryVec.buffer), scope) as VectorRow[];
       }
     } catch {
