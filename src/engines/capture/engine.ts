@@ -9,7 +9,9 @@ import { parseLooseJson } from './llm-parser.js';
 
 export { parseLooseJson, redact };
 
-const SKIP_TOOLS = new Set(['Read', 'Glob', 'listFiles']);
+const SKIP_TOOLS = new Set(['Read', 'Glob', 'listFiles', 'Bash']);
+const SHORT_TOOLS = new Set(['Edit', 'Write']);
+const SHORT_MAX_CHARS = 500;
 
 export class CaptureEngine {
   private recentHashes: string[] = [];
@@ -26,7 +28,8 @@ export class CaptureEngine {
   observe(toolName: string, toolOutput: string, sessionId?: string): void {
     if (SKIP_TOOLS.has(toolName)) return;
 
-    const content = redact(toolOutput.slice(0, this.config.capture.max_tool_output_chars));
+    const maxChars = SHORT_TOOLS.has(toolName) ? SHORT_MAX_CHARS : this.config.capture.max_tool_output_chars;
+    const content = redact(toolOutput.slice(0, maxChars));
     if (content.length < 10) return;
 
     const hash = hashContent(content);
@@ -51,7 +54,7 @@ export class CaptureEngine {
     }
 
     logger.info(`summarize: ${rows.length} working memories, extracting facts...`);
-    const conversationText = rows.map(r => r.content).join('\n').slice(0, 10000);
+    const conversationText = rows.map(r => r.content).join('\n').slice(-10000);
     const prjPath = projectPath ?? '';
 
     try {
@@ -126,11 +129,11 @@ export class CaptureEngine {
     }
   }
 
-  capturePreference(text: string, patternType: string, sessionId?: string): void {
+  captureUserPrompt(text: string, sessionId?: string): void {
     sessionId ??= process.env.CLAUDE_SESSION_ID ?? 'unknown';
     this.db.prepare(
-      'INSERT INTO working_memories (id, session_id, source, content, pattern_type) VALUES (?, ?, ?, ?, ?)'
-    ).run(randomUUID(), sessionId, 'preference_detect', text, patternType);
+      'INSERT INTO working_memories (id, session_id, source, content, pattern_type) VALUES (?, ?, ?, ?, NULL)'
+    ).run(randomUUID(), sessionId, 'user_prompt', redact(text));
   }
 
   saveSnapshot(data: { sessionId: string; toolCount?: number; projectPath?: string }): void {

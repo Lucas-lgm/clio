@@ -4,8 +4,8 @@ async function main() {
   const text = process.env.CLAUDE_USER_PROMPT ?? process.env.HOOK_USER_PROMPT ?? '';
   if (!text) return;
 
-  // Detect preferences (fire and forget)
-  sendToClio('detect_preferences', { text, sessionId: process.env.CLAUDE_SESSION_ID }).catch(() => {});
+  // Capture raw user prompt for later LLM summarization
+  sendToClio('capture_user_prompt', { text, sessionId: process.env.CLAUDE_SESSION_ID }).catch(() => {});
 
   // Recall relevant memories
   const memories = await sendToClio('recall_relevant', { text }) as string | undefined;

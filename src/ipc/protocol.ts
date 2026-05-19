@@ -1,6 +1,6 @@
 export type IpcRequestType =
   | 'capture_observation'
-  | 'detect_preferences'
+  | 'capture_user_prompt'
   | 'recall_initial_context'
   | 'recall_relevant'
   | 'summarize_session'
